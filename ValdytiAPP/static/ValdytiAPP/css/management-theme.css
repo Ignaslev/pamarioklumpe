@@ -1,0 +1,55 @@
+:root {
+    --ink: #111111;
+    --muted: #716d5e;
+    --paper: #fff6d8;
+    --white: #fffff3;
+    --green: #f6d77a;
+    --green-2: #e8c24f;
+    --gold: #f6d77a;
+    --line: #e7dcba;
+    --danger: #a83d32;
+    --shadow: 0 20px 60px rgba(42, 34, 4, .09);
+}
+
+.app-body,
+.management-content { background: #fffff3; }
+
+.eyebrow,
+.module-link,
+.back-link,
+.actions a,
+.actions button { color: #7a5d00; }
+
+.button-primary {
+    background: #f5d36f;
+    color: #111;
+    border: 2px solid #111;
+    box-shadow: 3px 3px 0 #111;
+}
+.button-primary:hover { background: #f8df91; color: #111; transform: translate(1px, 1px); box-shadow: 2px 2px 0 #111; }
+.button-secondary,
+.button-quiet { background: #fffff3; border: 1px solid #cfc59b; color: #111; }
+
+.module-card,
+.form-card,
+.table-card { background: #fffff3; border-color: #111; }
+.module-card { border-width: 2px; box-shadow: 5px 5px 0 #f6d77a; }
+.module-card.active:hover { box-shadow: 7px 7px 0 #f6d77a; }
+
+th { background: #f9e6a8; color: #111; border-bottom: 2px solid #111; }
+td { border-bottom-color: #e8e0bd; }
+
+.filter-bar input,
+.filter-bar select,
+.form-control { background: #fffff3; border-color: #bcb287; }
+.filter-bar input:focus,
+.filter-bar select:focus,
+.form-control:focus { outline: 2px solid #f6d77a; outline-offset: 1px; border-color: #111; }
+
+.message { background: #fff0bd; color: #4b3900; border-left: 4px solid #f6d77a; }
+
+.login-page { background: #f6d77a; }
+.login-card { background: #fffff3; border: 2px solid #111; box-shadow: 8px 8px 0 #111; }
+.login-logo { display: block; width: 150px; height: 150px; margin: 0 auto 22px; border-radius: 50%; object-fit: cover; mix-blend-mode: multiply; }
+.login-card h1 { text-align: center; }
+.login-card input { background: #fffff3; border-color: #bcb287; }

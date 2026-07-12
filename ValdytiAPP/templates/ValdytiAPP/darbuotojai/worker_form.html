@@ -1,0 +1,18 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}{% if object %}Redaguoti darbuotoją{% else %}Pridėti darbuotoją{% endif %} — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="page-heading"><div><a class="back-link" href="{% url 'worker-list' %}">← Darbuotojai</a><h1>{% if object %}Redaguoti darbuotoją{% else %}Pridėti darbuotoją{% endif %}</h1></div></div>
+<form method="post" class="form-card">
+    {% csrf_token %}
+    <div class="form-grid">
+    {% for field in form %}
+        <div class="form-field {% if field.name == 'notes' %}span-2{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+            {{ field }}
+            {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </div>
+    {% endfor %}
+    </div>
+    <div class="form-actions"><a class="button button-secondary" href="{% url 'worker-list' %}">Atšaukti</a><button class="button button-primary" type="submit">Išsaugoti</button></div>
+</form>
+{% endblock %}

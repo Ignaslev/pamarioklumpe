@@ -1,0 +1,9 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Ištrinti darbuotoją — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="form-card">
+    <h1>Ištrinti darbuotoją?</h1>
+    <p>Tikrai norite ištrinti {{ object }}?</p>
+    <form method="post">{% csrf_token %}<div class="form-actions"><a class="button button-secondary" href="{% url 'worker-list' %}">Atšaukti</a><button class="button button-primary" type="submit">Ištrinti</button></div></form>
+</div>
+{% endblock %}

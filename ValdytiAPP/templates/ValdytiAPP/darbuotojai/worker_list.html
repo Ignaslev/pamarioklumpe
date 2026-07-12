@@ -1,0 +1,35 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Darbuotojai — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="page-heading split">
+    <div><p class="eyebrow">Valdymas</p><h1>Darbuotojai</h1></div>
+    {% if perms.valdyti.add_worker %}<a class="button button-primary" href="{% url 'worker-create' %}">+ Pridėti darbuotoją</a>{% endif %}
+</div>
+<form method="get" class="filter-bar">
+    <input type="search" name="q" value="{{ request.GET.q }}" placeholder="Ieškoti pagal vardą ar pareigas">
+    <button class="button button-secondary" type="submit">Ieškoti</button>
+</form>
+<div class="table-card">
+    <table>
+        <thead><tr><th>Darbuotojas</th><th>Pareigos</th><th>Telefonas</th><th>El. paštas</th><th></th></tr></thead>
+        <tbody>
+        {% for worker in workers %}
+            <tr>
+                <td><strong>{{ worker.first_name }} {{ worker.last_name }}</strong></td>
+                <td>{{ worker.job_title }}</td>
+                <td>{{ worker.phone|default:"—" }}</td>
+                <td>{{ worker.email|default:"—" }}</td>
+                <td class="actions">
+                    {% if perms.valdyti.change_worker %}<a href="{% url 'worker-update' worker.pk %}">Redaguoti</a>{% endif %}
+                    {% if perms.valdyti.delete_worker %}
+                    <form method="post" action="{% url 'worker-delete' worker.pk %}" onsubmit="return confirm('Tikrai ištrinti šį darbuotoją?');">
+                        {% csrf_token %}<button type="submit">Ištrinti</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+        {% empty %}<tr><td colspan="5" class="empty-state">Darbuotojų dar nėra.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

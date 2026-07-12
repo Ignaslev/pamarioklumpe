@@ -1,0 +1,59 @@
+{% load static %}
+<!doctype html>
+<html lang="lt">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Pamario Klumpė{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'ValdytiAPP/css/app.css' %}">
+    <link rel="stylesheet" href="{% static 'ValdytiAPP/css/sidebar.css' %}">
+    <link rel="stylesheet" href="{% static 'ValdytiAPP/css/management-theme.css' %}">
+</head>
+<body class="app-body">
+{% if user.is_authenticated %}
+<aside class="sidebar">
+    <a class="sidebar-brand" href="{% url 'dashboard' %}">
+        <img class="sidebar-logo" src="{% static 'pamarioklumpe/images/pamario-klumpe-logo.jpg' %}" alt="Pamario Klumpė">
+        <span><strong>Pamario Klumpė</strong><small>Valdymo sistema</small></span>
+    </a>
+
+    <nav class="sidebar-nav" aria-label="Pagrindinis meniu">
+        <span class="sidebar-label">Meniu</span>
+        <a class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">
+            <span class="sidebar-icon" aria-hidden="true">⌂</span>
+            <span>Apžvalga</span>
+        </a>
+        {% if perms.valdyti.view_worker %}
+        <a class="sidebar-link {% if 'darbuotojai' in request.path %}active{% endif %}" href="{% url 'worker-list' %}">
+            <span class="sidebar-icon" aria-hidden="true">♙</span>
+            <span>Darbuotojai</span>
+        </a>
+        {% endif %}
+    </nav>
+
+    <div class="sidebar-user">
+        <div class="user-avatar">{{ user.username|first|upper }}</div>
+        <div class="user-details">
+            <strong>{{ user.get_full_name|default:user.username }}</strong>
+            <small>Prisijungta</small>
+        </div>
+        <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button class="logout-button" type="submit" title="Atsijungti" aria-label="Atsijungti">↪</button>
+        </form>
+    </div>
+</aside>
+{% endif %}
+
+<div class="management-content">
+    <main class="page-shell">
+        {% if messages %}
+            <div class="messages" aria-live="polite">
+                {% for message in messages %}<div class="message {{ message.tags }}">{{ message }}</div>{% endfor %}
+            </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+</div>
+</body>
+</html>

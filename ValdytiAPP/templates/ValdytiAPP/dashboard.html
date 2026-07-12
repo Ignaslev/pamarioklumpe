@@ -1,0 +1,16 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Valdymas — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="page-heading">
+    <div><p class="eyebrow">Valdymo sistema</p><h1>Valdymas</h1></div>
+</div>
+{% if perms.valdyti.view_worker %}
+<section class="module-grid">
+    <a class="module-card active" href="{% url 'worker-list' %}">
+        <h2>Darbuotojai</h2>
+        <p>Peržiūrėti ir valdyti darbuotojų sąrašą.</p>
+        <span class="module-link">Atidaryti →</span>
+    </a>
+</section>
+{% endif %}
+{% endblock %}

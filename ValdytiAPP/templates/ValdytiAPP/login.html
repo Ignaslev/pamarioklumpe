@@ -1,0 +1,28 @@
+{% load static %}
+<!doctype html>
+<html lang="lt">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Prisijungimas — Pamario Klumpė</title>
+    <link rel="stylesheet" href="{% static 'ValdytiAPP/css/app.css' %}">
+    <link rel="stylesheet" href="{% static 'ValdytiAPP/css/management-theme.css' %}">
+</head>
+<body class="login-page">
+<main class="login-card">
+    <img class="login-logo" src="{% static 'pamarioklumpe/images/pamario-klumpe-logo.jpg' %}" alt="Pamario Klumpė">
+    <h1>Prisijungti</h1>
+    <p>Įveskite savo valdymo sistemos paskyros duomenis.</p>
+    {% if form.errors %}<div class="message error">Neteisingas naudotojo vardas arba slaptažodis.</div>{% endif %}
+    <form method="post" class="stacked-form">
+        {% csrf_token %}
+        <label for="{{ form.username.id_for_label }}">Naudotojo vardas</label>
+        {{ form.username }}
+        <label for="{{ form.password.id_for_label }}">Slaptažodis</label>
+        {{ form.password }}
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+        <button class="button button-primary button-full" type="submit">Prisijungti</button>
+    </form>
+</main>
+</body>
+</html>
