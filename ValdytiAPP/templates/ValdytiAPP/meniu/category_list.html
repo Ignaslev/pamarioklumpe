@@ -1,0 +1,27 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Meniu kategorijos — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="page-heading split">
+    <div><a class="back-link" href="{% url 'menu-list' %}">← Meniu</a><h1>Meniu kategorijos</h1><p>Kategorija gali turėti pagrindinę kategoriją – taip kuriamos subkategorijos.</p></div>
+    {% if perms.valdyti.add_menucategory %}<a class="button button-primary" href="{% url 'menu-category-create' %}">+ Pridėti kategoriją</a>{% endif %}
+</div>
+<div class="table-card">
+    <table>
+        <thead><tr><th>Kategorija</th><th>Pagrindinė kategorija</th><th>Patiekalai</th><th>Būsena</th><th></th></tr></thead>
+        <tbody>
+        {% for category in categories %}
+            <tr>
+                <td><strong>{{ category.name }}</strong></td>
+                <td>{{ category.parent.name|default:"—" }}</td>
+                <td>{{ category.items.count }}</td>
+                <td>{% if category.is_active %}<span class="status status-active">Rodoma</span>{% else %}<span class="status status-muted">Nerodoma</span>{% endif %}</td>
+                <td class="actions">
+                    {% if perms.valdyti.change_menucategory %}<a href="{% url 'menu-category-update' category.pk %}">Redaguoti</a>{% endif %}
+                    {% if perms.valdyti.delete_menucategory %}<a href="{% url 'menu-category-delete' category.pk %}">Ištrinti</a>{% endif %}
+                </td>
+            </tr>
+        {% empty %}<tr><td colspan="5" class="empty-state">Meniu kategorijų dar nėra.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

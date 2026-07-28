@@ -1,0 +1,71 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Meniu — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="page-heading split">
+    <div>
+        <p class="eyebrow">Valdymas</p>
+        <h1>Meniu</h1>
+        <p>Čia saugomas jūsų patiekalų sąrašas, kategorijos ir kainos.</p>
+    </div>
+    <div class="button-group">
+        {% if perms.valdyti.view_menucategory %}<a class="button button-secondary" href="{% url 'menu-category-list' %}">Kategorijos</a>{% endif %}
+        {% if perms.valdyti.add_menuitem %}<a class="button button-primary" href="{% url 'menu-item-create' %}">+ Pridėti patiekalą</a>{% endif %}
+    </div>
+</div>
+
+<form method="get" class="filter-bar menu-filter-bar">
+    <input type="search" name="q" value="{{ request.GET.q }}" placeholder="Ieškoti patiekalo ar aprašymo">
+    <select name="category" aria-label="Filtruoti pagal kategoriją">
+        <option value="">Visos kategorijos</option>
+        {% for category in categories %}
+        <option value="{{ category.pk }}" {% if request.GET.category == category.pk|stringformat:'s' %}selected{% endif %}>
+            {% if category.parent %}{{ category.parent.name }} → {% endif %}{{ category.name }}
+        </option>
+        {% endfor %}
+    </select>
+    <button class="button button-secondary" type="submit">Filtruoti</button>
+</form>
+
+<div class="menu-overview">
+    <p><strong>{{ menu_items|length }}</strong> patiekalų pagal pasirinktą filtrą</p>
+</div>
+
+{% for category, items in menu_groups %}
+<section class="menu-category-section">
+    <div class="menu-category-heading">
+        <div>
+            {% if category.parent %}<p class="eyebrow">{{ category.parent.name }}</p>{% endif %}
+            <h2>{{ category.name }}</h2>
+        </div>
+        <span>{{ items|length }} patiekal{{ items|length|pluralize:"as,ai" }}</span>
+    </div>
+    <div class="table-card menu-table-card">
+        <table>
+            <thead><tr><th>Patiekalas</th><th>Kaina</th><th>Būsena</th><th></th></tr></thead>
+            <tbody>
+            {% for item in items %}
+                <tr>
+                    <td>
+                        <strong>{{ item.name }}</strong>
+                        {% if item.description %}<small>{{ item.description|linebreaksbr }}</small>{% endif %}
+                    </td>
+                    <td class="menu-price">{% if item.price is not None %}{{ item.price|floatformat:2 }} €{% if item.second_price is not None %} <span>/ {{ item.second_price|floatformat:2 }} €</span>{% endif %}{% else %}—{% endif %}</td>
+                    <td>{% if item.is_active %}<span class="status status-active">Rodomas</span>{% else %}<span class="status status-muted">Nerodomas</span>{% endif %}</td>
+                    <td class="actions">
+                        {% if perms.valdyti.change_menuitem %}<a href="{% url 'menu-item-update' item.pk %}">Redaguoti</a>{% endif %}
+                        {% if perms.valdyti.delete_menuitem %}
+                        <form method="post" action="{% url 'menu-item-delete' item.pk %}" onsubmit="return confirm('Tikrai ištrinti šį patiekalą?');">
+                            {% csrf_token %}<button type="submit">Ištrinti</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% empty %}
+<div class="table-card"><div class="empty-state">Pagal šį filtrą patiekalų nėra.</div></div>
+{% endfor %}
+{% endblock %}

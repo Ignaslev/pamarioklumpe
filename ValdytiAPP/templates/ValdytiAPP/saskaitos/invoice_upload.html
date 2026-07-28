@@ -1,0 +1,25 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Įkelti sąskaitą — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="page-heading">
+    <div>
+        <a class="back-link" href="{% url 'invoice-list' %}">← Sąskaitos</a>
+        <p class="eyebrow">Nauja sąskaita</p>
+        <h1>Įkelti PDF</h1>
+        <p>Originalus PDF bus išsaugotas, automatiškai nuskaitytas ir paverstas redaguojamu įrašu.</p>
+    </div>
+</div>
+<form method="post" enctype="multipart/form-data" class="form-card invoice-upload-card">
+    {% csrf_token %}
+    <div class="form-field">
+        <label for="{{ form.pdf.id_for_label }}">{{ form.pdf.label }} *</label>
+        {{ form.pdf }}
+        <small class="help-text">Leidžiami tik PDF failai. Tas pats PDF negalės būti įkeltas antrą kartą.</small>
+        {% for error in form.pdf.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+    </div>
+    <div class="form-actions">
+        <a class="button button-secondary" href="{% url 'invoice-list' %}">Atšaukti</a>
+        <button class="button button-primary" type="submit">Nuskaityti ir išsaugoti</button>
+    </div>
+</form>
+{% endblock %}

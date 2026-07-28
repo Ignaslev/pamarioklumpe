@@ -1,0 +1,65 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Sąskaitos — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="page-heading split">
+    <div>
+        <p class="eyebrow">Finansai</p>
+        <h1>Sąskaitos</h1>
+        <p>Įkeltos tiekėjų sąskaitos, jų PDF ir nuskaitytos eilutės.</p>
+    </div>
+    {% if perms.valdyti.add_invoice %}<a class="button button-primary" href="{% url 'invoice-upload' %}">+ Įkelti sąskaitą</a>{% endif %}
+</div>
+
+<form method="get" class="filter-bar invoice-filter-bar">
+    <input type="search" name="q" value="{{ request.GET.q }}" placeholder="Numeris, tiekėjas ar PVM kodas">
+    <label><span>Nuo</span><input type="date" name="date_from" value="{{ request.GET.date_from }}"></label>
+    <label><span>Iki</span><input type="date" name="date_to" value="{{ request.GET.date_to }}"></label>
+    <button class="button button-secondary" type="submit">Filtruoti</button>
+</form>
+
+<div class="invoice-overview"><strong>{{ invoices|length }}</strong> sąskaitų pagal pasirinktą filtrą</div>
+<div class="table-card invoice-table-card">
+    <table>
+        <thead><tr><th>Sąskaita</th><th>Tiekėjas</th><th>Data</th><th>Suma</th><th>Eilutės</th><th></th></tr></thead>
+        <tbody>
+        {% for invoice in invoices %}
+            <tr>
+                <td><strong>{{ invoice.invoice_number|default:"—" }}</strong><small>{{ invoice.original_filename }}</small></td>
+                <td>{{ invoice.supplier_name|default:"—" }}{% if invoice.supplier_vat_id %}<small>{{ invoice.supplier_vat_id }}</small>{% endif %}</td>
+                <td>{{ invoice.invoice_date|date:"Y-m-d"|default:"—" }}</td>
+                <td>{% if invoice.total is not None %}<strong>{{ invoice.total|floatformat:2 }} {{ invoice.currency }}</strong>{% else %}—{% endif %}</td>
+                <td>{{ invoice.lines.all|length }}</td>
+                <td class="actions invoice-actions-cell">
+                    <div class="invoice-actions">
+                    <details class="invoice-details"><summary title="Informacija" aria-label="Informacija">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 10v6M12 7h.01"></path></svg><span class="sr-only">Informacija</span>
+                    </summary>
+                        <div class="invoice-detail-panel">
+                            <div class="invoice-detail-grid">
+                                <p><strong>Be PVM:</strong> {{ invoice.subtotal|floatformat:2|default:"—" }} {{ invoice.currency }}</p>
+                                <p><strong>PVM:</strong> {{ invoice.vat_amount|floatformat:2|default:"—" }} {% if invoice.vat_rate is not None %}({{ invoice.vat_rate }} %){% endif %}</p>
+                                <p><strong>Apmokėti iki:</strong> {{ invoice.due_date|date:"Y-m-d"|default:"—" }}</p>
+                                <p><strong>Pirkėjas:</strong> {{ invoice.buyer_name|default:"—" }}</p>
+                            </div>
+                            {% if invoice.supplier_address %}<p><strong>Tiekėjo adresas:</strong> {{ invoice.supplier_address }}</p>{% endif %}
+                            <div class="invoice-pdf-links"><a href="{% url 'invoice-pdf' invoice.pk %}" target="_blank" rel="noopener">Atidaryti PDF</a><a href="{% url 'invoice-pdf' invoice.pk %}?download=1">Atsisiųsti PDF</a></div>
+                            <div class="invoice-lines-wrap">
+                                <table class="invoice-lines-table"><thead><tr><th>#</th><th>Prekė / paslauga</th><th>Kodas</th><th>Kiekis</th><th>Kaina</th><th>Suma</th></tr></thead><tbody>
+                                {% for line in invoice.lines.all %}<tr><td>{{ line.line_number }}</td><td>{{ line.name }}</td><td>{{ line.product_code|default:"—" }}</td><td>{% if line.quantity is not None %}{{ line.quantity|floatformat:"-3" }}{% else %}—{% endif %}{% if line.unit %} {{ line.unit }}{% endif %}</td><td>{% if line.unit_price is not None %}{{ line.unit_price|floatformat:2 }} {{ invoice.currency }}{% else %}—{% endif %}</td><td>{% if line.total is not None %}{{ line.total|floatformat:2 }} {{ invoice.currency }}{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="6">Nuskaitytų eilučių nėra.</td></tr>{% endfor %}
+                                </tbody><tfoot><tr><td colspan="5"><strong>Iš viso (su PVM)</strong></td><td><strong>{% if invoice.total is not None %}{{ invoice.total|floatformat:2 }} {{ invoice.currency }}{% else %}—{% endif %}</strong></td></tr></tfoot></table>
+                            </div>
+                            <small class="hash-note">PDF piršto atspaudas: {{ invoice.file_hash }}</small>
+                        </div>
+                    </details>
+                    {% if perms.valdyti.change_invoice %}<a class="action-icon" href="{% url 'invoice-update' invoice.pk %}" title="Redaguoti" aria-label="Redaguoti"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg></a>{% endif %}
+                    {% if perms.valdyti.delete_invoice %}<a class="action-icon action-icon-danger" href="{% url 'invoice-delete' invoice.pk %}" title="Ištrinti" aria-label="Ištrinti"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg></a>{% endif %}
+                    </div>
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="6"><div class="empty-state">Sąskaitų dar nėra. Įkelkite pirmą PDF.</div></td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

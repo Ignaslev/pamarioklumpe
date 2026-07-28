@@ -29,6 +29,18 @@
             <span>Darbuotojai</span>
         </a>
         {% endif %}
+        {% if perms.valdyti.view_menuitem %}
+        <a class="sidebar-link {% if 'meniu' in request.path %}active{% endif %}" href="{% url 'menu-list' %}">
+            <span class="sidebar-icon" aria-hidden="true">☷</span>
+            <span>Meniu</span>
+        </a>
+        {% endif %}
+        {% if perms.valdyti.view_invoice %}
+        <a class="sidebar-link {% if 'saskaitos' in request.path %}active{% endif %}" href="{% url 'invoice-list' %}">
+            <span class="sidebar-icon" aria-hidden="true">▤</span>
+            <span>Sąskaitos</span>
+        </a>
+        {% endif %}
     </nav>
 
     <div class="sidebar-user">

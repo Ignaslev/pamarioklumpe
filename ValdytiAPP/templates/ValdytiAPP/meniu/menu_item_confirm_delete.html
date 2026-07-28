@@ -1,0 +1,9 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Ištrinti patiekalą — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="form-card">
+    <h1>Ištrinti patiekalą?</h1>
+    <p>Tikrai norite ištrinti „{{ object.name }}“?</p>
+    <form method="post">{% csrf_token %}<div class="form-actions"><a class="button button-secondary" href="{% url 'menu-list' %}">Atšaukti</a><button class="button button-primary" type="submit">Ištrinti</button></div></form>
+</div>
+{% endblock %}

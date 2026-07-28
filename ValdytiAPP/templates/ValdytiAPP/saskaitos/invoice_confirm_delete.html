@@ -1,0 +1,9 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Ištrinti sąskaitą — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="form-card">
+    <h1>Ištrinti sąskaitą?</h1>
+    <p>Bus negrįžtamai ištrinta sąskaita „{{ object }}“, visos jos eilutės ir originalus PDF failas.</p>
+    <form method="post">{% csrf_token %}<div class="form-actions"><a class="button button-secondary" href="{% url 'invoice-list' %}">Atšaukti</a><button class="button button-primary" type="submit">Ištrinti</button></div></form>
+</div>
+{% endblock %}

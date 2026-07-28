@@ -4,13 +4,27 @@
 <div class="page-heading">
     <div><p class="eyebrow">Valdymo sistema</p><h1>Valdymas</h1></div>
 </div>
-{% if perms.valdyti.view_worker %}
 <section class="module-grid">
+    {% if perms.valdyti.view_worker %}
     <a class="module-card active" href="{% url 'worker-list' %}">
         <h2>Darbuotojai</h2>
         <p>Peržiūrėti ir valdyti darbuotojų sąrašą.</p>
         <span class="module-link">Atidaryti →</span>
     </a>
+    {% endif %}
+    {% if perms.valdyti.view_menuitem %}
+    <a class="module-card active" href="{% url 'menu-list' %}">
+        <h2>Meniu</h2>
+        <p>Valdyti kategorijas, patiekalus, aprašymus ir kainas.</p>
+        <span class="module-link">Atidaryti →</span>
+    </a>
+    {% endif %}
+    {% if perms.valdyti.view_invoice %}
+    <a class="module-card active" href="{% url 'invoice-list' %}">
+        <h2>Sąskaitos</h2>
+        <p>Įkelti PDF, peržiūrėti nuskaitytus duomenis ir valdyti sąskaitų eilutes.</p>
+        <span class="module-link">Atidaryti →</span>
+    </a>
+    {% endif %}
 </section>
-{% endif %}
 {% endblock %}

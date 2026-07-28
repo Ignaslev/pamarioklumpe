@@ -100,6 +100,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "pamarioklumpe" / "static"]
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+INVOICE_UPLOAD_MAX_BYTES = int(os.getenv("INVOICE_UPLOAD_MAX_BYTES", str(15 * 1024 * 1024)))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "login"

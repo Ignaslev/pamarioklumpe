@@ -1,0 +1,9 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Ištrinti kategoriją — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="form-card">
+    <h1>Ištrinti kategoriją?</h1>
+    <p>„{{ object.name }}“ bus galima ištrinti tik jeigu joje nėra patiekalų ar subkategorijų.</p>
+    <form method="post">{% csrf_token %}<div class="form-actions"><a class="button button-secondary" href="{% url 'menu-category-list' %}">Atšaukti</a><button class="button button-primary" type="submit">Ištrinti</button></div></form>
+</div>
+{% endblock %}

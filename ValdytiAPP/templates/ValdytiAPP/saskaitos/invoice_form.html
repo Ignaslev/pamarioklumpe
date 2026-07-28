@@ -1,0 +1,35 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Redaguoti sąskaitą — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="page-heading split">
+    <div><a class="back-link" href="{% url 'invoice-list' %}">← Sąskaitos</a><p class="eyebrow">Sąskaita</p><h1>{{ invoice.invoice_number|default:invoice.original_filename }}</h1><p>Patikrinkite nuskaitytus duomenis ir, jei reikia, pakoreguokite.</p></div>
+    <div class="button-group"><a class="button button-secondary" target="_blank" rel="noopener" href="{% url 'invoice-pdf' invoice.pk %}">Atidaryti PDF</a><a class="button button-secondary" href="{% url 'invoice-pdf' invoice.pk %}?download=1">Atsisiųsti PDF</a></div>
+</div>
+<form method="post" class="form-card invoice-form">
+    {% csrf_token %}
+    <h2>Sąskaitos informacija</h2>
+    <div class="form-grid">
+    {% for field in form %}
+        <div class="form-field {% if field.name in 'supplier_address buyer_address notes' %}span-2{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>{{ field }}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </div>
+    {% endfor %}
+    </div>
+    <h2 class="invoice-lines-heading">Eilutės</h2>
+    {{ formset.management_form }}
+    {% if formset.non_form_errors %}<div class="field-error">{{ formset.non_form_errors }}</div>{% endif %}
+    <div class="invoice-edit-lines">
+    {% for line_form in formset %}
+        <div class="invoice-edit-line">
+            {% for hidden in line_form.hidden_fields %}{{ hidden }}{% endfor %}
+            <div class="form-grid line-form-grid">
+                {% for field in line_form.visible_fields %}
+                    <div class="form-field {% if field.name == 'name' %}line-name{% endif %}"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endfor %}
+    </div>
+    <div class="form-actions"><a class="button button-secondary" href="{% url 'invoice-list' %}">Atšaukti</a><button class="button button-primary" type="submit">Išsaugoti pakeitimus</button></div>
+</form>
+{% endblock %}
