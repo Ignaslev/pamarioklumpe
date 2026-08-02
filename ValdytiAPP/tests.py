@@ -1,4 +1,6 @@
+import json
 import tempfile
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -7,7 +9,7 @@ from django.test import TestCase
 from django.test.utils import override_settings
 from django.urls import reverse
 
-from .models import Invoice, MenuCategory, MenuItem, Worker
+from .models import AttendanceEvent, Invoice, MenuCategory, MenuItem, Worker
 
 
 class WorkerManagementTests(TestCase):
@@ -74,6 +76,77 @@ class WorkerManagementTests(TestCase):
         response = self.client.post(reverse("menu-category-delete", args=[category.pk]))
         self.assertRedirects(response, reverse("menu-category-list"))
         self.assertTrue(MenuCategory.objects.filter(pk=category.pk).exists())
+
+
+@override_settings(CLOCK_DEVICE_API_KEY="test-device-key", CLOCK_DUPLICATE_WINDOW_SECONDS=15)
+class AttendanceApiTests(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_superuser(
+            username="clock-admin", email="clock-admin@example.com", password="test-password-123"
+        )
+        self.worker = Worker.objects.create(
+            first_name="Jonas",
+            last_name="Jonaitis",
+            job_title="Virėjas",
+            chip_uid="04:a1-b2 c3",
+        )
+        self.url = reverse("clock-scan-api")
+
+    def scan(self, uid="04A1B2C3", key="test-device-key"):
+        return self.client.post(
+            self.url,
+            data=json.dumps({"uid": uid}),
+            content_type="application/json",
+            HTTP_X_DEVICE_KEY=key,
+        )
+
+    def test_worker_chip_uid_is_normalized(self):
+        self.assertEqual(self.worker.chip_uid, "04A1B2C3")
+
+    def test_scan_requires_device_key(self):
+        response = self.scan(key="wrong-key")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(AttendanceEvent.objects.count(), 0)
+
+    def test_unknown_chip_is_rejected(self):
+        response = self.scan(uid="FFFFFFFF")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(AttendanceEvent.objects.count(), 0)
+
+    def test_first_scan_clocks_in_and_immediate_repeat_is_duplicate(self):
+        first = self.scan()
+        repeated = self.scan()
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json()["event"], "IN")
+        self.assertFalse(first.json()["duplicate"])
+        self.assertTrue(repeated.json()["duplicate"])
+        self.assertEqual(AttendanceEvent.objects.count(), 1)
+
+    def test_next_scan_after_duplicate_window_clocks_out(self):
+        old_event = AttendanceEvent.objects.create(
+            worker=self.worker,
+            worker_name=str(self.worker),
+            chip_uid=self.worker.chip_uid,
+            event_type=AttendanceEvent.EventType.CLOCK_IN,
+        )
+        AttendanceEvent.objects.filter(pk=old_event.pk).update(
+            scanned_at=old_event.scanned_at - timedelta(seconds=16)
+        )
+        response = self.scan()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["event"], "OUT")
+        self.assertEqual(AttendanceEvent.objects.count(), 2)
+
+    def test_attendance_page_requires_login(self):
+        response = self.client.get(reverse("attendance-list"))
+        self.assertEqual(response.status_code, 302)
+
+    def test_admin_can_view_attendance_page(self):
+        self.client.force_login(self.admin)
+        self.scan()
+        response = self.client.get(reverse("attendance-list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Jonas Jonaitis")
 
 
 class InvoiceManagementTests(TestCase):

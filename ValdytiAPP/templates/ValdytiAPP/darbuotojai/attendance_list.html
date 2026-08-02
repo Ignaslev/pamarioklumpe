@@ -1,0 +1,46 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Darbo laikas — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="page-heading split">
+    <div><p class="eyebrow">Darbuotojai</p><h1>Darbo laikas</h1><p>Arduino terminalo užregistruoti atvykimai ir išvykimai.</p></div>
+</div>
+
+<div class="attendance-summary">
+    <div><strong>{{ currently_working }}</strong><span>šiuo metu darbe</span></div>
+    <div><strong>{{ today_event_count }}</strong><span>šiandienos žymėjimų</span></div>
+</div>
+
+<form method="get" class="filter-bar attendance-filter-bar">
+    <select name="worker">
+        <option value="">Visi darbuotojai</option>
+        {% for worker in workers %}<option value="{{ worker.pk }}" {% if request.GET.worker == worker.pk|stringformat:"s" %}selected{% endif %}>{{ worker }}</option>{% endfor %}
+    </select>
+    <label><span>Nuo</span><input type="date" name="date_from" value="{{ request.GET.date_from }}"></label>
+    <label><span>Iki</span><input type="date" name="date_to" value="{{ request.GET.date_to }}"></label>
+    <button class="button button-secondary" type="submit">Filtruoti</button>
+</form>
+
+<div class="table-card">
+    <table>
+        <thead><tr><th>Laikas</th><th>Darbuotojas</th><th>Žymėjimas</th><th>Lustas</th></tr></thead>
+        <tbody>
+        {% for event in events %}
+            <tr>
+                <td><strong>{{ event.scanned_at|date:"Y-m-d H:i:s" }}</strong></td>
+                <td>{{ event.worker_name }}</td>
+                <td><span class="status {% if event.event_type == 'IN' %}status-clock-in{% else %}status-clock-out{% endif %}">{{ event.get_event_type_display }}</span></td>
+                <td><code class="chip-code">{{ event.chip_uid }}</code></td>
+            </tr>
+        {% empty %}<tr><td colspan="4" class="empty-state">Žymėjimų dar nėra.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if is_paginated %}
+<nav class="pagination" aria-label="Puslapiai">
+    {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}">← Ankstesnis</a>{% endif %}
+    <span>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}">Kitas →</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

@@ -70,6 +70,16 @@ td { border-bottom-color: #e8e0bd; }
 .menu-category-heading > span { padding: 4px 9px; border: 1px solid #cfc59b; border-radius: 999px; color: #716d5e; font-size: 12px; font-weight: 800; white-space: nowrap; }
 .checkbox-control { width: 19px; height: 19px; margin: 5px 0 0; accent-color: #e8c24f; }
 
+.chip-code { padding: 3px 7px; border-radius: 6px; background: #f3edda; font: 700 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .04em; }
+.attendance-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 220px)); gap: 14px; margin: -6px 0 22px; }
+.attendance-summary > div { display: flex; flex-direction: column; padding: 18px 20px; border: 1px solid #111; border-radius: 12px; background: #fffff3; box-shadow: 3px 3px 0 #f6d77a; }
+.attendance-summary strong { font: 700 30px/1 Georgia, serif; }
+.attendance-summary span { margin-top: 7px; color: #716d5e; font-size: 12px; font-weight: 800; }
+.attendance-filter-bar label { display: flex; align-items: center; gap: 6px; color: #716d5e; font-size: 13px; font-weight: 700; }
+.attendance-filter-bar input[type="date"] { width: 145px; padding: 10px; border: 1px solid #bcb287; border-radius: 9px; background: #fffff3; font: inherit; }
+.status-clock-in { background: #dcefe2; color: #1d6538; }
+.status-clock-out { background: #eee9dc; color: #675c40; }
+
 .invoice-filter-bar label { display: flex; align-items: center; gap: 6px; color: #716d5e; font-size: 13px; font-weight: 700; }
 .invoice-filter-bar input[type="date"] { width: 145px; padding: 10px; border: 1px solid #bcb287; border-radius: 9px; background: #fffff3; font: inherit; }
 .invoice-overview { margin: 4px 0 14px; color: #716d5e; font-size: 13px; }
@@ -120,4 +130,7 @@ td { border-bottom-color: #e8e0bd; }
     .invoice-detail-panel { min-width: 460px; }
     .invoice-detail-grid { grid-template-columns: 1fr; }
     .line-form-grid { grid-template-columns: 1fr 1fr; }
+    .attendance-summary { grid-template-columns: 1fr 1fr; }
+    .attendance-filter-bar label { width: calc(50% - 6px); justify-content: space-between; }
+    .attendance-filter-bar input[type="date"] { width: 130px; }
 }

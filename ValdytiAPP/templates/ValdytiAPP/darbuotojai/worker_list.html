@@ -11,7 +11,7 @@
 </form>
 <div class="table-card">
     <table>
-        <thead><tr><th>Darbuotojas</th><th>Pareigos</th><th>Telefonas</th><th>El. paštas</th><th></th></tr></thead>
+        <thead><tr><th>Darbuotojas</th><th>Pareigos</th><th>Telefonas</th><th>El. paštas</th><th>Lustas</th><th></th></tr></thead>
         <tbody>
         {% for worker in workers %}
             <tr>
@@ -19,6 +19,7 @@
                 <td>{{ worker.job_title }}</td>
                 <td>{{ worker.phone|default:"—" }}</td>
                 <td>{{ worker.email|default:"—" }}</td>
+                <td>{% if worker.chip_uid %}<code class="chip-code">{{ worker.chip_uid }}</code>{% else %}<span class="status status-muted">Nepriskirtas</span>{% endif %}</td>
                 <td class="actions">
                     {% if perms.valdyti.change_worker %}<a href="{% url 'worker-update' worker.pk %}">Redaguoti</a>{% endif %}
                     {% if perms.valdyti.delete_worker %}
@@ -28,7 +29,7 @@
                     {% endif %}
                 </td>
             </tr>
-        {% empty %}<tr><td colspan="5" class="empty-state">Darbuotojų dar nėra.</td></tr>{% endfor %}
+        {% empty %}<tr><td colspan="6" class="empty-state">Darbuotojų dar nėra.</td></tr>{% endfor %}
         </tbody>
     </table>
 </div>

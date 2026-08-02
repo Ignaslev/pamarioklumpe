@@ -1,18 +1,21 @@
 from django import forms
 
-from .models import Invoice, InvoiceLine, MenuCategory, MenuItem, Worker
+from .models import Invoice, InvoiceLine, MenuCategory, MenuItem, Worker, normalize_chip_uid
 
 
 class WorkerForm(forms.ModelForm):
     class Meta:
         model = Worker
-        fields = ("first_name", "last_name", "job_title", "phone", "email", "notes")
+        fields = ("first_name", "last_name", "job_title", "phone", "email", "chip_uid", "notes")
         widgets = {"notes": forms.Textarea(attrs={"rows": 4})}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs.setdefault("class", "form-control")
+
+    def clean_chip_uid(self):
+        return normalize_chip_uid(self.cleaned_data.get("chip_uid"))
 
 
 class MenuCategoryForm(forms.ModelForm):

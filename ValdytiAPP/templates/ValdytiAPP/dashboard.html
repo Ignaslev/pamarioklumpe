@@ -12,6 +12,13 @@
         <span class="module-link">Atidaryti →</span>
     </a>
     {% endif %}
+    {% if perms.valdyti.view_attendanceevent %}
+    <a class="module-card active" href="{% url 'attendance-list' %}">
+        <h2>Darbo laikas</h2>
+        <p>Peržiūrėti darbuotojų atvykimo ir išvykimo žymėjimus.</p>
+        <span class="module-link">Atidaryti →</span>
+    </a>
+    {% endif %}
     {% if perms.valdyti.view_menuitem %}
     <a class="module-card active" href="{% url 'menu-list' %}">
         <h2>Meniu</h2>

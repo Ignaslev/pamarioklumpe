@@ -1,12 +1,23 @@
 from django.contrib import admin
 
-from .models import Invoice, InvoiceLine, MenuCategory, MenuItem, Worker
+from .models import AttendanceEvent, Invoice, InvoiceLine, MenuCategory, MenuItem, Worker
 
 
 @admin.register(Worker)
 class WorkerAdmin(admin.ModelAdmin):
-    list_display = ("first_name", "last_name", "job_title", "phone", "email")
-    search_fields = ("first_name", "last_name", "job_title", "phone", "email")
+    list_display = ("first_name", "last_name", "job_title", "chip_uid", "phone", "email")
+    search_fields = ("first_name", "last_name", "job_title", "chip_uid", "phone", "email")
+
+
+@admin.register(AttendanceEvent)
+class AttendanceEventAdmin(admin.ModelAdmin):
+    list_display = ("scanned_at", "worker_name", "event_type", "chip_uid")
+    list_filter = ("event_type", "scanned_at")
+    search_fields = ("worker_name", "chip_uid")
+    readonly_fields = ("worker", "worker_name", "chip_uid", "event_type", "scanned_at")
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(MenuCategory)

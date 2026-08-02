@@ -29,6 +29,12 @@
             <span>Darbuotojai</span>
         </a>
         {% endif %}
+        {% if perms.valdyti.view_attendanceevent %}
+        <a class="sidebar-link {% if 'darbo-laikas' in request.path %}active{% endif %}" href="{% url 'attendance-list' %}">
+            <span class="sidebar-icon" aria-hidden="true">◷</span>
+            <span>Darbo laikas</span>
+        </a>
+        {% endif %}
         {% if perms.valdyti.view_menuitem %}
         <a class="sidebar-link {% if 'meniu' in request.path %}active{% endif %}" href="{% url 'menu-list' %}">
             <span class="sidebar-icon" aria-hidden="true">☷</span>

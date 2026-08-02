@@ -1,21 +1,29 @@
+import json
+import secrets
+from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
+from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.db.models.deletion import ProtectedError
 from django.db.models import Q
 from django.forms import inlineformset_factory
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views import View
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
+from django.utils import timezone
 from itertools import groupby
 
 from .forms import InvoiceForm, InvoiceLineForm, InvoiceUploadForm, MenuCategoryForm, MenuItemForm, WorkerForm
 from .invoice_parser import InvoiceParserError, cleaned_invoice_data, parse_invoice_pdf
-from .models import Invoice, InvoiceLine, MenuCategory, MenuItem, Worker
+from .models import AttendanceEvent, Invoice, InvoiceLine, MenuCategory, MenuItem, Worker, normalize_chip_uid
 
 
 InvoiceLineFormSet = inlineformset_factory(
@@ -85,6 +93,108 @@ class WorkerDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
         return super().form_valid(form)
 
 
+class AttendanceListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    model = AttendanceEvent
+    permission_required = "valdyti.view_attendanceevent"
+    template_name = "ValdytiAPP/darbuotojai/attendance_list.html"
+    context_object_name = "events"
+    paginate_by = 100
+
+    def get_queryset(self):
+        queryset = AttendanceEvent.objects.select_related("worker")
+        worker_id = self.request.GET.get("worker", "").strip()
+        date_from = self.request.GET.get("date_from", "").strip()
+        date_to = self.request.GET.get("date_to", "").strip()
+        if worker_id.isdigit():
+            queryset = queryset.filter(worker_id=worker_id)
+        if date_from:
+            queryset = queryset.filter(scanned_at__date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(scanned_at__date__lte=date_to)
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["workers"] = Worker.objects.all()
+        today = timezone.localdate()
+        context["today_event_count"] = AttendanceEvent.objects.filter(scanned_at__date=today).count()
+
+        latest_by_worker = {}
+        for event in AttendanceEvent.objects.filter(worker__isnull=False).select_related("worker"):
+            latest_by_worker.setdefault(event.worker_id, event)
+        context["currently_working"] = sum(
+            event.event_type == AttendanceEvent.EventType.CLOCK_IN
+            for event in latest_by_worker.values()
+        )
+        return context
+
+
+def process_clock_scan(raw_uid):
+    uid = normalize_chip_uid(raw_uid)
+    if not uid:
+        raise ValueError("Trūksta lusto UID.")
+
+    with transaction.atomic():
+        worker = Worker.objects.select_for_update().get(chip_uid=uid)
+        now = timezone.now()
+        previous = AttendanceEvent.objects.filter(worker=worker).first()
+        duplicate_window = timedelta(seconds=settings.CLOCK_DUPLICATE_WINDOW_SECONDS)
+        if previous and now - previous.scanned_at < duplicate_window:
+            return previous, True
+
+        event_type = AttendanceEvent.EventType.CLOCK_IN
+        if previous and previous.event_type == AttendanceEvent.EventType.CLOCK_IN:
+            event_type = AttendanceEvent.EventType.CLOCK_OUT
+        event = AttendanceEvent.objects.create(
+            worker=worker,
+            worker_name=str(worker),
+            chip_uid=uid,
+            event_type=event_type,
+        )
+        return event, False
+
+
+@csrf_exempt
+@require_POST
+def clock_scan_api(request):
+    configured_key = settings.CLOCK_DEVICE_API_KEY
+    provided_key = request.headers.get("X-Device-Key", "")
+    if not configured_key:
+        return JsonResponse({"ok": False, "message": "Terminalo API nesukonfigūruotas."}, status=503)
+    if not provided_key or not secrets.compare_digest(provided_key, configured_key):
+        return JsonResponse({"ok": False, "message": "Terminalas neatpažintas."}, status=401)
+    if len(request.body) > 2048:
+        return JsonResponse({"ok": False, "message": "Užklausa per didelė."}, status=413)
+
+    try:
+        payload = json.loads(request.body or b"{}")
+        event, duplicate = process_clock_scan(payload.get("uid"))
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        return JsonResponse({"ok": False, "message": str(exc) or "Neteisinga užklausa."}, status=400)
+    except ValidationError as exc:
+        return JsonResponse({"ok": False, "message": "; ".join(exc.messages)}, status=400)
+    except Worker.DoesNotExist:
+        return JsonResponse({"ok": False, "message": "Lustas nepriskirtas darbuotojui."}, status=404)
+
+    if duplicate:
+        message = "Žymėjimas jau priimtas."
+    elif event.event_type == AttendanceEvent.EventType.CLOCK_IN:
+        message = "Atvykimas užregistruotas."
+    else:
+        message = "Išvykimas užregistruotas."
+    return JsonResponse(
+        {
+            "ok": True,
+            "duplicate": duplicate,
+            "worker": event.worker_name,
+            "event": event.event_type,
+            "event_label": event.get_event_type_display(),
+            "message": message,
+            "scanned_at": event.scanned_at.isoformat(),
+        }
+    )
+
+
 class MenuListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
     model = MenuItem
     permission_required = "valdyti.view_menuitem"
@@ -95,6 +205,9 @@ class MenuListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
         queryset = MenuItem.objects.select_related("category", "category__parent")
         category_id = self.request.GET.get("category", "").strip()
         query = self.request.GET.get("q", "").strip()
+        show_archived = self.request.GET.get("show_archived") == "1"
+        if not show_archived:
+            queryset = queryset.filter(is_active=True)
         if category_id.isdigit():
             queryset = queryset.filter(category_id=category_id)
         if query:
@@ -110,7 +223,8 @@ class MenuListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
             items = list(grouped_items)
             menu_groups.append((items[0].category, items))
         context["menu_groups"] = menu_groups
-        context["categories"] = MenuCategory.objects.select_related("parent").all()
+        categories = MenuCategory.objects.select_related("parent")
+        context["categories"] = categories.all() if self.request.GET.get("show_archived") == "1" else categories.filter(is_active=True)
         return context
 
 

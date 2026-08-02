@@ -1,4 +1,20 @@
+import re
+
+from django.core.exceptions import ValidationError
 from django.db import models
+
+
+def normalize_chip_uid(value):
+    """Store RFID UIDs in one stable form regardless of spaces or separators."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    if not re.fullmatch(r"[0-9A-Fa-f:\- ]+", value):
+        raise ValidationError("Lusto UID gali sudaryti tik skaičiai, raidės A–F ir skirtukai.")
+    normalized = re.sub(r"[:\- ]", "", value).upper()
+    if len(normalized) < 8 or len(normalized) > 32 or len(normalized) % 2:
+        raise ValidationError("Lusto UID turi būti 4–16 baitų šešioliktainis kodas.")
+    return normalized
 
 
 class Worker(models.Model):
@@ -7,6 +23,14 @@ class Worker(models.Model):
     job_title = models.CharField("Pareigos", max_length=120)
     phone = models.CharField("Telefono numeris", max_length=30, blank=True)
     email = models.EmailField("El. paštas", blank=True)
+    chip_uid = models.CharField(
+        "Lusto UID",
+        max_length=32,
+        unique=True,
+        blank=True,
+        null=True,
+        help_text="RFID lusto kodas, pvz. 04A1B2C3. Tą patį lustą galima priskirti tik vienam darbuotojui.",
+    )
     notes = models.TextField("Pastabos", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -18,6 +42,41 @@ class Worker(models.Model):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+
+    def clean(self):
+        super().clean()
+        self.chip_uid = normalize_chip_uid(self.chip_uid)
+
+    def save(self, *args, **kwargs):
+        self.chip_uid = normalize_chip_uid(self.chip_uid)
+        return super().save(*args, **kwargs)
+
+
+class AttendanceEvent(models.Model):
+    class EventType(models.TextChoices):
+        CLOCK_IN = "IN", "Atvyko"
+        CLOCK_OUT = "OUT", "Išvyko"
+
+    worker = models.ForeignKey(
+        Worker,
+        verbose_name="Darbuotojas",
+        on_delete=models.SET_NULL,
+        related_name="attendance_events",
+        blank=True,
+        null=True,
+    )
+    worker_name = models.CharField("Darbuotojo vardas nuskaitymo metu", max_length=170)
+    chip_uid = models.CharField("Lusto UID", max_length=32, db_index=True)
+    event_type = models.CharField("Veiksmas", max_length=3, choices=EventType.choices)
+    scanned_at = models.DateTimeField("Nuskaitymo laikas", auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-scanned_at", "-pk")
+        verbose_name = "Darbo laiko žymėjimas"
+        verbose_name_plural = "Darbo laiko žymėjimai"
+
+    def __str__(self):
+        return f"{self.worker_name} – {self.get_event_type_display()}"
 
 
 class MenuCategory(models.Model):
@@ -55,6 +114,13 @@ class MenuCategory(models.Model):
 
 
 class MenuItem(models.Model):
+    kitchenforce_id = models.PositiveIntegerField(
+        "KitchenForce ID",
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Šio įrašo identifikatorius KitchenForce sistemoje.",
+    )
     category = models.ForeignKey(
         MenuCategory,
         verbose_name="Kategorija",

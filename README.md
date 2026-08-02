@@ -4,7 +4,7 @@ Current scope only:
 
 - `pamarioklumpe.lt` — logo and „Greitai...“;
 - `valdyti.pamarioklumpe.lt` — login-protected management;
-- first management page — darbuotojai.
+- management pages — darbuotojai, darbo laikas, meniu and sąskaitos.
 
 ## Structure
 
@@ -72,3 +72,20 @@ python manage.py makemigrations --check --dry-run
 
 Do not commit `.env`, `.venv`, SQLite databases, logs, media, or `staticfiles`.
 
+## Arduino darbo laiko terminalas
+
+Kiekvienam darbuotojui jo redagavimo lange galima priskirti unikalų RFID lusto UID. Terminalas siunčia užklausą į:
+
+`POST https://valdyti.pamarioklumpe.lt/api/clock/scan/`
+
+Antraštė:
+
+`X-Device-Key: <CLOCK_DEVICE_API_KEY>`
+
+JSON turinys:
+
+```json
+{"uid": "04A1B2C3"}
+```
+
+Pirmas nuskaitymas registruoja atvykimą, kitas — išvykimą. Pakartotinis to paties lusto nuskaitymas per 15 sekundžių nesukuria antro įrašo. Serverio raktas laikomas tik `.env` faile, o Arduino kopija — atskirame į Git neįtraukiamame paslapčių faile.
