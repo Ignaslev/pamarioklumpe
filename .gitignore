@@ -13,3 +13,4 @@ media/
 htmlcov/
 .pytest_cache/
 .codex-remote-attachments/
+arduino/PamarioKlumpeClockTerminal/secrets.h

@@ -16,6 +16,7 @@ urlpatterns = [
     path("darbuotojai/<int:pk>/redaguoti/", views.WorkerUpdateView.as_view(), name="worker-update"),
     path("darbuotojai/<int:pk>/istrinti/", views.WorkerDeleteView.as_view(), name="worker-delete"),
     path("darbo-laikas/", views.AttendanceListView.as_view(), name="attendance-list"),
+    path("darbo-laikas/suvestine/", views.AttendanceMonthlySummaryView.as_view(), name="attendance-monthly-summary"),
     path("api/clock/scan/", views.clock_scan_api, name="clock-scan-api"),
     path("meniu/", views.MenuListView.as_view(), name="menu-list"),
     path("meniu/naujas/", views.MenuItemCreateView.as_view(), name="menu-item-create"),

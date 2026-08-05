@@ -1,6 +1,8 @@
 import json
 import secrets
-from datetime import timedelta
+from calendar import monthrange
+from collections import defaultdict
+from datetime import date, timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
@@ -125,6 +127,131 @@ class AttendanceListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
         context["currently_working"] = sum(
             event.event_type == AttendanceEvent.EventType.CLOCK_IN
             for event in latest_by_worker.values()
+        )
+        return context
+
+
+class AttendanceMonthlySummaryView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    """Monthly worker-by-day attendance overview built from scan events."""
+
+    model = Worker
+    permission_required = "valdyti.view_attendanceevent"
+    template_name = "ValdytiAPP/darbuotojai/attendance_monthly_summary.html"
+    context_object_name = "workers"
+
+    MONTH_NAMES = (
+        "sausis", "vasaris", "kovas", "balandis", "gegužė", "birželis",
+        "liepa", "rugpjūtis", "rugsėjis", "spalis", "lapkritis", "gruodis",
+    )
+    WEEKDAY_NAMES = ("Pr", "An", "Tr", "Kt", "Pn", "Št", "Sk")
+
+    def get_selected_month(self):
+        value = self.request.GET.get("month", "").strip()
+        if value:
+            try:
+                return date.fromisoformat(f"{value}-01").replace(day=1)
+            except ValueError:
+                pass
+        return timezone.localdate().replace(day=1)
+
+    @staticmethod
+    def next_month(month_start):
+        if month_start.month == 12:
+            return date(month_start.year + 1, 1, 1)
+        return date(month_start.year, month_start.month + 1, 1)
+
+    @staticmethod
+    def duration_label(minutes):
+        hours, remaining_minutes = divmod(minutes, 60)
+        if hours and remaining_minutes:
+            return f"{hours} val. {remaining_minutes} min."
+        if hours:
+            return f"{hours} val."
+        return f"{remaining_minutes} min."
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        month_start = self.get_selected_month()
+        next_month = self.next_month(month_start)
+        days_in_month = monthrange(month_start.year, month_start.month)[1]
+        month_end = date(month_start.year, month_start.month, days_in_month)
+
+        events_by_worker_and_day = defaultdict(lambda: defaultdict(list))
+        events = (
+            AttendanceEvent.objects.filter(
+                worker__isnull=False,
+                scanned_at__date__gte=month_start,
+                scanned_at__date__lte=month_end,
+            )
+            .select_related("worker")
+            .order_by("worker_id", "scanned_at", "pk")
+        )
+
+        for event in events:
+            local_time = timezone.localtime(event.scanned_at)
+            events_by_worker_and_day[event.worker_id][local_time.day].append((event, local_time))
+
+        days = [
+            {
+                "number": day_number,
+                "weekday": self.WEEKDAY_NAMES[date(month_start.year, month_start.month, day_number).weekday()],
+                "is_weekend": date(month_start.year, month_start.month, day_number).weekday() >= 5,
+            }
+            for day_number in range(1, days_in_month + 1)
+        ]
+
+        rows = []
+        for worker in context["workers"]:
+            total_minutes = 0
+            cells = []
+
+            for day in days:
+                scans = events_by_worker_and_day[worker.pk][day["number"]]
+                sessions = []
+                open_clock_in = None
+                day_seconds = 0
+
+                for event, local_time in scans:
+                    if event.event_type == AttendanceEvent.EventType.CLOCK_IN:
+                        open_clock_in = local_time
+                    elif open_clock_in is not None:
+                        day_seconds += max(0, int((local_time - open_clock_in).total_seconds()))
+                        sessions.append(
+                            {
+                                "clock_in": open_clock_in.strftime("%H:%M"),
+                                "clock_out": local_time.strftime("%H:%M"),
+                            }
+                        )
+                        open_clock_in = None
+
+                day_minutes = int((day_seconds + 30) // 60)
+                total_minutes += day_minutes
+                cells.append(
+                    {
+                        "sessions": sessions,
+                        "open_clock_in": open_clock_in.strftime("%H:%M") if open_clock_in else "",
+                        "duration": self.duration_label(day_minutes) if sessions else "",
+                    }
+                )
+
+            rows.append(
+                {
+                    "worker": worker,
+                    "cells": cells,
+                    "total": self.duration_label(total_minutes) if total_minutes else "0 val.",
+                }
+            )
+
+        previous_month = (month_start - timedelta(days=1)).replace(day=1)
+        context.update(
+            {
+                "days": days,
+                "rows": rows,
+                "selected_month": month_start.strftime("%Y-%m"),
+                "month_title": f"{self.MONTH_NAMES[month_start.month - 1].capitalize()} {month_start.year}",
+                "previous_month": previous_month.strftime("%Y-%m"),
+                "next_month": next_month.strftime("%Y-%m"),
+            }
         )
         return context
 

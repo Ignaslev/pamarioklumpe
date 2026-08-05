@@ -1,0 +1,63 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Darbo laiko suvestinė — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="page-heading split">
+    <div>
+        <p class="eyebrow">Darbo laikas</p>
+        <h1>Mėnesio suvestinė</h1>
+        <p>Kiekvieno darbuotojo atvykimo ir išvykimo žymėjimai pagal mėnesio dienas.</p>
+    </div>
+    <a class="button button-secondary" href="{% url 'attendance-list' %}">← Žymėjimas</a>
+</div>
+
+<form method="get" class="filter-bar attendance-month-filter-bar">
+    <label><span>Mėnuo</span><input type="month" name="month" value="{{ selected_month }}"></label>
+    <button class="button button-secondary" type="submit">Rodyti</button>
+    <a class="button button-quiet" href="?month={{ previous_month }}">← Ankstesnis</a>
+    <a class="button button-quiet" href="?month={{ next_month }}">Kitas →</a>
+</form>
+
+<div class="attendance-month-title">{{ month_title }}</div>
+
+<div class="table-card attendance-monthly-card">
+    <table class="attendance-monthly-table">
+        <thead>
+            <tr>
+                <th class="attendance-worker-column">Darbuotojas</th>
+                {% for day in days %}
+                    <th class="attendance-day-heading {% if day.is_weekend %}weekend{% endif %}">
+                        <strong>{{ day.number }}</strong><small>{{ day.weekday }}</small>
+                    </th>
+                {% endfor %}
+                <th class="attendance-total-column">Viso</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+                <tr>
+                    <td class="attendance-worker-column">
+                        <strong>{{ row.worker }}</strong>
+                        <small>{{ row.worker.job_title }}</small>
+                    </td>
+                    {% for cell in row.cells %}
+                        <td class="attendance-day-cell">
+                            {% if cell.duration %}
+                                <strong class="attendance-duration">{{ cell.duration }}</strong>
+                            {% elif cell.open_clock_in %}
+                                <span class="attendance-empty">0</span>
+                            {% else %}
+                                <span class="attendance-empty">—</span>
+                            {% endif %}
+                        </td>
+                    {% endfor %}
+                    <td class="attendance-total-column"><strong>{{ row.total }}</strong></td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="33" class="empty-state">Darbuotojų dar nėra.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<p class="attendance-month-note">Laikas skaičiuojamas tik iš užbaigtų tos pačios dienos atvykimo ir išvykimo porų. Jei žmogus atvyko, bet dar neišsiregistravo, rodoma 0.</p>
+{% endblock %}

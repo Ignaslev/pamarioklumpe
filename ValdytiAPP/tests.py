@@ -1,6 +1,6 @@
 import json
 import tempfile
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -8,6 +8,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.test.utils import override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import AttendanceEvent, Invoice, MenuCategory, MenuItem, Worker
 
@@ -147,6 +148,31 @@ class AttendanceApiTests(TestCase):
         response = self.client.get(reverse("attendance-list"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Jonas Jonaitis")
+
+    def test_admin_can_view_monthly_attendance_summary(self):
+        clock_in = AttendanceEvent.objects.create(
+            worker=self.worker,
+            worker_name=str(self.worker),
+            chip_uid=self.worker.chip_uid,
+            event_type=AttendanceEvent.EventType.CLOCK_IN,
+        )
+        clock_out = AttendanceEvent.objects.create(
+            worker=self.worker,
+            worker_name=str(self.worker),
+            chip_uid=self.worker.chip_uid,
+            event_type=AttendanceEvent.EventType.CLOCK_OUT,
+        )
+        clock_in_time = timezone.make_aware(datetime(2026, 8, 5, 8, 0))
+        clock_out_time = timezone.make_aware(datetime(2026, 8, 5, 16, 30))
+        AttendanceEvent.objects.filter(pk=clock_in.pk).update(scanned_at=clock_in_time)
+        AttendanceEvent.objects.filter(pk=clock_out.pk).update(scanned_at=clock_out_time)
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("attendance-monthly-summary"), {"month": "2026-08"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Mėnesio suvestinė")
+        self.assertContains(response, "8 val. 30 min.")
 
 
 class InvoiceManagementTests(TestCase):

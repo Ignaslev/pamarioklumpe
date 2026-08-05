@@ -79,6 +79,25 @@ td { border-bottom-color: #e8e0bd; }
 .attendance-filter-bar input[type="date"] { width: 145px; padding: 10px; border: 1px solid #bcb287; border-radius: 9px; background: #fffff3; font: inherit; }
 .status-clock-in { background: #dcefe2; color: #1d6538; }
 .status-clock-out { background: #eee9dc; color: #675c40; }
+.attendance-month-filter-bar { align-items: end; }
+.attendance-month-filter-bar label { display: flex; flex-direction: column; gap: 5px; color: #716d5e; font-size: 13px; font-weight: 700; }
+.attendance-month-filter-bar input[type="month"] { padding: 10px; border: 1px solid #bcb287; border-radius: 9px; background: #fffff3; font: inherit; }
+.attendance-month-title { margin: 4px 0 13px; font: 700 25px/1.1 Georgia, serif; }
+.attendance-monthly-card { box-shadow: 4px 4px 0 #f6d77a; }
+.attendance-monthly-table { min-width: 2650px; font-size: 12px; }
+.attendance-monthly-table th, .attendance-monthly-table td { padding: 9px 7px; text-align: center; }
+.attendance-worker-column { position: sticky; left: 0; z-index: 2; min-width: 175px; text-align: left !important; background: #fffff3; box-shadow: 2px 0 0 #e7dcba; }
+.attendance-monthly-table thead .attendance-worker-column { z-index: 4; background: #f9e6a8; }
+.attendance-total-column { min-width: 85px; background: #fff8dd; white-space: nowrap; }
+.attendance-day-heading { min-width: 75px; white-space: nowrap; }
+.attendance-day-heading strong, .attendance-day-heading small { display: block; }
+.attendance-day-heading small { margin-top: 2px; color: #716d5e; }
+.attendance-day-heading.weekend { background: #f1df9c; }
+.attendance-day-cell { min-width: 75px; vertical-align: top; }
+.attendance-duration { display: block; white-space: nowrap; }
+.attendance-duration { color: #1d6538; font-size: 12px; }
+.attendance-empty { color: #b9b092; }
+.attendance-month-note { margin: 14px 2px; color: #716d5e; font-size: 13px; }
 
 .invoice-filter-bar label { display: flex; align-items: center; gap: 6px; color: #716d5e; font-size: 13px; font-weight: 700; }
 .invoice-filter-bar input[type="date"] { width: 145px; padding: 10px; border: 1px solid #bcb287; border-radius: 9px; background: #fffff3; font: inherit; }
@@ -133,4 +152,5 @@ td { border-bottom-color: #e8e0bd; }
     .attendance-summary { grid-template-columns: 1fr 1fr; }
     .attendance-filter-bar label { width: calc(50% - 6px); justify-content: space-between; }
     .attendance-filter-bar input[type="date"] { width: 130px; }
+    .attendance-month-filter-bar label { width: auto; }
 }

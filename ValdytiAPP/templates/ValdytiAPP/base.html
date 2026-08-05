@@ -30,10 +30,16 @@
         </a>
         {% endif %}
         {% if perms.valdyti.view_attendanceevent %}
-        <a class="sidebar-link {% if 'darbo-laikas' in request.path %}active{% endif %}" href="{% url 'attendance-list' %}">
-            <span class="sidebar-icon" aria-hidden="true">◷</span>
-            <span>Darbo laikas</span>
-        </a>
+        <div class="sidebar-menu-group {% if 'darbo-laikas' in request.path %}active{% endif %}">
+            <span class="sidebar-link sidebar-parent">
+                <span class="sidebar-icon" aria-hidden="true">◷</span>
+                <span>Darbo laikas</span>
+            </span>
+            <div class="sidebar-sublinks">
+                <a class="sidebar-sublink {% if request.resolver_match.url_name == 'attendance-list' %}active{% endif %}" href="{% url 'attendance-list' %}">Žymėjimas</a>
+                <a class="sidebar-sublink {% if request.resolver_match.url_name == 'attendance-monthly-summary' %}active{% endif %}" href="{% url 'attendance-monthly-summary' %}">Suvestinė</a>
+            </div>
+        </div>
         {% endif %}
         {% if perms.valdyti.view_menuitem %}
         <a class="sidebar-link {% if 'meniu' in request.path %}active{% endif %}" href="{% url 'menu-list' %}">
