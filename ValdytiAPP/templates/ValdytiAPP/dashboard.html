@@ -33,5 +33,12 @@
         <span class="module-link">Atidaryti →</span>
     </a>
     {% endif %}
+    {% if perms.valdyti.view_purchase %}
+    <a class="module-card active" href="{% url 'purchase-list' %}">
+        <h2>Prekių pirkimas</h2>
+        <p>Prekės pagal čekius, išlaidos parduotuvėse ir dienos, savaitės bei mėnesio ataskaitos.</p>
+        <span class="module-link">Atidaryti →</span>
+    </a>
+    {% endif %}
 </section>
 {% endblock %}

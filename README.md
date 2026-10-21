@@ -72,6 +72,21 @@ python manage.py makemigrations --check --dry-run
 
 Do not commit `.env`, `.venv`, SQLite databases, logs, media, or `staticfiles`.
 
+## Prekių pirkimas
+
+Vietinis puslapis: `http://127.0.0.1:8020/valdyti/prekiu-pirkimas/`.
+Produkcijoje po diegimo: `https://valdyti.pamarioklumpe.lt/prekiu-pirkimas/`.
+
+- Rankinis prekių iš čekių įvedimas, redagavimas ir trynimas.
+- Kategorijos: Mėsa, Daržovės, Kita. Parduotuvės: Lidl, Norfa, Maxima, Iki.
+- Saugoma data, prekė, kiekis (kg, vnt. arba l), vieneto kaina, galutinė sumokėta suma ir čekio žyma.
+- Vienodos prekės su tuo pačiu matavimo vienetu sujungiamos suvestinėje; pirminiai įrašai lieka išskleidžiami.
+- Vidutinė vieneto kaina skaičiuojama iš sumokėtos sumos ir kiekio. Visos sumos su PVM, po nuolaidų.
+- Ataskaitos: diena, savaitė (pirmadienis–sekmadienis), kalendorinis mėnuo.
+- Datos su duomenimis pateikiamos pasirinkime; numatyta naujausia įvesta diena.
+- Reikalinga migracija `0007_purchase`. Paprastiems vartotojams reikia suteikti `Purchase` modelio teises; supervartotojas jas turi automatiškai.
+- Nuotraukų automatinis nuskaitymas šiame etape neįtrauktas: pirmiausia įvedami iš pateiktų čekių patikrinti duomenys.
+
 ## Arduino darbo laiko terminalas
 
 Kiekvienam darbuotojui jo redagavimo lange galima priskirti unikalų RFID lusto UID. Terminalas siunčia užklausą į:

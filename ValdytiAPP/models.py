@@ -1,6 +1,8 @@
 import re
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
@@ -213,3 +215,57 @@ class InvoiceLine(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Purchase(models.Model):
+    class Category(models.TextChoices):
+        MEAT = "meat", "Mėsa"
+        VEGETABLES = "vegetables", "Daržovės"
+        OTHER = "other", "Kita"
+
+    class Store(models.TextChoices):
+        LIDL = "lidl", "Lidl"
+        NORFA = "norfa", "Norfa"
+        MAXIMA = "maxima", "Maxima"
+        IKI = "iki", "Iki"
+
+    class Unit(models.TextChoices):
+        KG = "kg", "kg"
+        PIECE = "vnt", "vnt."
+        LITRE = "l", "l"
+
+    purchase_date = models.DateField("Pirkimo data", db_index=True)
+    store = models.CharField("Parduotuvė", max_length=10, choices=Store.choices)
+    category = models.CharField("Kategorija", max_length=12, choices=Category.choices)
+    name = models.CharField("Prekės pavadinimas", max_length=255)
+    quantity = models.DecimalField("Kiekis", max_digits=12, decimal_places=3,
+                                   validators=[MinValueValidator(Decimal("0.001"))])
+    unit = models.CharField("Matavimo vienetas", max_length=3, choices=Unit.choices, default=Unit.KG)
+    unit_price = models.DecimalField("Vieneto kaina (€)", max_digits=12, decimal_places=4,
+                                     validators=[MinValueValidator(Decimal("0"))])
+    total = models.DecimalField("Sumokėta suma (€)", max_digits=12, decimal_places=2,
+                                validators=[MinValueValidator(Decimal("0"))],
+                                help_text="Galutinė prekės suma iš čekio, pritaikius nuolaidas.")
+    receipt_reference = models.CharField("Čekio numeris / žyma", max_length=120, blank=True)
+    notes = models.TextField("Pastabos", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-purchase_date", "category", "name", "pk")
+        verbose_name = "Prekių pirkimas"
+        verbose_name_plural = "Prekių pirkimai"
+        constraints = [
+            models.CheckConstraint(condition=models.Q(quantity__gt=0), name="purchase_quantity_positive"),
+            models.CheckConstraint(condition=models.Q(unit_price__gte=0), name="purchase_price_nonnegative"),
+            models.CheckConstraint(condition=models.Q(total__gte=0), name="purchase_total_nonnegative"),
+        ]
+
+    def clean(self):
+        super().clean()
+        self.name = " ".join(self.name.split())
+        if not self.name:
+            raise ValidationError({"name": "Įveskite prekės pavadinimą."})
+
+    def __str__(self):
+        return f"{self.purchase_date} – {self.name} ({self.get_store_display()})"

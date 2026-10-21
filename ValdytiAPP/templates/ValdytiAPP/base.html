@@ -54,6 +54,12 @@
             <span>Sąskaitos</span>
         </a>
         {% endif %}
+        {% if perms.valdyti.view_purchase %}
+        <a class="sidebar-link {% if 'prekiu-pirkimas' in request.path %}active{% endif %}" href="{% url 'purchase-list' %}">
+            <span class="sidebar-icon" aria-hidden="true">▦</span>
+            <span>Prekių pirkimas</span>
+        </a>
+        {% endif %}
     </nav>
 
     <div class="sidebar-user">

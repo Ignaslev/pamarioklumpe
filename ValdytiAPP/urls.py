@@ -5,12 +5,17 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 
 from . import views
+from .purchase_views import PurchaseCreateView, PurchaseDeleteView, PurchaseListView, PurchaseUpdateView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("login/", auth_views.LoginView.as_view(template_name="ValdytiAPP/login.html"), name="login"),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("", views.dashboard, name="dashboard"),
+    path("prekiu-pirkimas/", PurchaseListView.as_view(), name="purchase-list"),
+    path("prekiu-pirkimas/naujas/", PurchaseCreateView.as_view(), name="purchase-create"),
+    path("prekiu-pirkimas/<int:pk>/redaguoti/", PurchaseUpdateView.as_view(), name="purchase-update"),
+    path("prekiu-pirkimas/<int:pk>/istrinti/", PurchaseDeleteView.as_view(), name="purchase-delete"),
     path("darbuotojai/", views.WorkerListView.as_view(), name="worker-list"),
     path("darbuotojai/naujas/", views.WorkerCreateView.as_view(), name="worker-create"),
     path("darbuotojai/<int:pk>/redaguoti/", views.WorkerUpdateView.as_view(), name="worker-update"),

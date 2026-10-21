@@ -1,0 +1,10 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}Ištrinti pirkimą — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="page-heading"><h1>Ištrinti pirkimą?</h1></div>
+<form method="post" class="form-card">{% csrf_token %}
+    <p>{{ object.purchase_date|date:'Y-m-d' }} · {{ object.get_store_display }} · <strong>{{ object.name }}</strong> · {{ object.total|floatformat:2 }} €</p>
+    <p>Šis įrašas bus pašalintas iš dienos, savaitės ir mėnesio suvestinių.</p>
+    <div class="form-actions"><a class="button button-secondary" href="{% url 'purchase-list' %}?date={{ object.purchase_date|date:'Y-m-d' }}">Atšaukti</a><button class="button button-primary" type="submit">Ištrinti</button></div>
+</form>
+{% endblock %}

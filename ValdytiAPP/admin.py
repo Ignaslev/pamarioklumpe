@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import AttendanceEvent, Invoice, InvoiceLine, MenuCategory, MenuItem, Worker
+from .models import AttendanceEvent, Invoice, InvoiceLine, MenuCategory, MenuItem, Purchase, Worker
+
+
+@admin.register(Purchase)
+class PurchaseAdmin(admin.ModelAdmin):
+    list_display = ("purchase_date", "store", "category", "name", "quantity", "unit", "unit_price", "total")
+    list_filter = ("store", "category", "purchase_date")
+    search_fields = ("name", "receipt_reference", "notes")
 
 
 @admin.register(Worker)

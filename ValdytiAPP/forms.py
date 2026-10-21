@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Invoice, InvoiceLine, MenuCategory, MenuItem, Worker, normalize_chip_uid
+from .models import Invoice, InvoiceLine, MenuCategory, MenuItem, Purchase, Worker, normalize_chip_uid
 
 
 class WorkerForm(forms.ModelForm):
@@ -16,6 +16,25 @@ class WorkerForm(forms.ModelForm):
 
     def clean_chip_uid(self):
         return normalize_chip_uid(self.cleaned_data.get("chip_uid"))
+
+
+class PurchaseForm(forms.ModelForm):
+    class Meta:
+        model = Purchase
+        fields = ("purchase_date", "store", "category", "name", "quantity", "unit",
+                  "unit_price", "total", "receipt_reference", "notes")
+        widgets = {
+            "purchase_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "quantity": forms.NumberInput(attrs={"step": "0.001", "min": "0.001"}),
+            "unit_price": forms.NumberInput(attrs={"step": "0.0001", "min": "0"}),
+            "total": forms.NumberInput(attrs={"step": "0.01", "min": "0"}),
+            "notes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.setdefault("class", "form-control")
 
 
 class MenuCategoryForm(forms.ModelForm):

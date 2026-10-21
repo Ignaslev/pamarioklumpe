@@ -1,0 +1,17 @@
+{% extends "ValdytiAPP/base.html" %}
+{% block title %}{% if object %}Redaguoti pirkimą{% else %}Pridėti pirkimą{% endif %} — Pamario Klumpė{% endblock %}
+{% block content %}
+<div class="page-heading"><a class="back-link" href="{% url 'purchase-list' %}">← Prekių pirkimas</a><h1>{% if object %}Redaguoti pirkimą{% else %}Pridėti pirkimą{% endif %}</h1><p>Viena eilutė — viena prekė iš čekio. Kainos ir sumos su PVM.</p></div>
+<form method="post" class="form-card">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <div class="form-grid">{% for field in form %}
+        <div class="form-field {% if field.name == 'notes' %}span-2{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>{{ field }}
+            {% if field.help_text %}<small class="help-text">{{ field.help_text }}</small>{% endif %}
+            {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </div>
+    {% endfor %}</div>
+    <div class="form-actions"><a class="button button-secondary" href="{% url 'purchase-list' %}">Atšaukti</a>{% if not object %}<button class="button button-secondary" name="add_another" value="1" type="submit">Išsaugoti ir pridėti kitą</button>{% endif %}<button class="button button-primary" type="submit">Išsaugoti</button></div>
+</form>
+{% endblock %}
