@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
+from django.http import FileResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import CreateView, DeleteView, TemplateView, UpdateView
@@ -28,6 +29,7 @@ def purchase_url(day):
 class PurchaseListView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
     permission_required = "valdyti.view_purchase"
     template_name = "ValdytiAPP/pirkimai/purchase_list.html"
+    report_period = None
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -35,7 +37,7 @@ class PurchaseListView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView
                                .values_list("purchase_date", flat=True).distinct())
         day = selected_date(self.request.GET.get("date"),
                             available_dates[0] if available_dates else timezone.localdate())
-        period = self.request.GET.get("period", "day")
+        period = self.report_period or self.request.GET.get("period", "day")
         if period not in {"day", "week", "month"}:
             period = "day"
         start = end = day
@@ -54,9 +56,14 @@ class PurchaseListView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView
                   for key, label in Purchase.Category.choices}
         daily = {}
         grand_total = Decimal("0.00")
+        goods_total = Decimal("0.00")
+        payment_adjustments = Decimal("0.00")
         for item in purchases:
-            grand_total += item.total
-            store_totals[item.store]["total"] += item.total
+            paid = item.total + item.payment_adjustment
+            goods_total += item.total
+            payment_adjustments += item.payment_adjustment
+            grand_total += paid
+            store_totals[item.store]["total"] += paid
             store_totals[item.store]["count"] += 1
             group = groups[item.category]
             group["total"] += item.total
@@ -64,31 +71,54 @@ class PurchaseListView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView
             key = (" ".join(item.name.split()).casefold(), item.unit)
             product = group["products"].setdefault(key, {
                 "name": item.name, "unit": item.get_unit_display(),
-                "quantity": Decimal("0"), "total": Decimal("0.00"), "entries": [],
+                "quantity": Decimal("0"), "quantity_unknown": False,
+                "total": Decimal("0.00"), "entries": [],
             })
-            product["quantity"] += item.quantity
+            if item.quantity is None:
+                product["quantity_unknown"] = True
+            else:
+                product["quantity"] += item.quantity
             product["total"] += item.total
             product["entries"].append(item)
             daily.setdefault(item.purchase_date, {
                 "date": item.purchase_date, "total": Decimal("0.00"),
                 "stores": {key: Decimal("0.00") for key, _ in Purchase.Store.choices},
             })
-            daily[item.purchase_date]["total"] += item.total
-            daily[item.purchase_date]["stores"][item.store] += item.total
+            daily[item.purchase_date]["total"] += paid
+            daily[item.purchase_date]["stores"][item.store] += paid
 
         for group in groups.values():
             group["products"] = sorted(group["products"].values(), key=lambda p: p["name"].casefold())
             for product in group["products"]:
-                product["average_price"] = product["total"] / product["quantity"]
+                if product["quantity_unknown"]:
+                    product["quantity"] = None
+                    product["average_price"] = None
+                else:
+                    product["average_price"] = product["total"] / product["quantity"]
         for row in daily.values():
             row["store_values"] = list(row["stores"].values())
         context.update({
             "selected_date": day, "available_dates": available_dates, "period": period,
             "date_from": start, "date_to": end, "purchase_groups": list(groups.values()),
             "store_totals": list(store_totals.values()), "grand_total": grand_total,
+            "goods_total": goods_total, "payment_adjustments": payment_adjustments,
             "purchase_count": len(purchases), "daily_totals": sorted(daily.values(), key=lambda r: r["date"]),
         })
         return context
+
+
+class PurchaseDailyPdfView(PurchaseListView):
+    report_period = "day"
+
+    def get(self, request, *args, **kwargs):
+        from .purchase_pdf import build_daily_purchase_pdf
+
+        context = self.get_context_data(**kwargs)
+        filename = f"prekiu-pirkimas-{context['selected_date'].isoformat()}.pdf"
+        response = FileResponse(build_daily_purchase_pdf(context), as_attachment=True,
+                                filename=filename, content_type="application/pdf")
+        response["Cache-Control"] = "private, no-store"
+        return response
 
 
 class PurchaseCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):

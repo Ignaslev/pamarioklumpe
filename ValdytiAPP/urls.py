@@ -5,7 +5,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 
 from . import views
-from .purchase_views import PurchaseCreateView, PurchaseDeleteView, PurchaseListView, PurchaseUpdateView
+from .purchase_views import PurchaseCreateView, PurchaseDailyPdfView, PurchaseDeleteView, PurchaseListView, PurchaseUpdateView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -13,6 +13,7 @@ urlpatterns = [
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("", views.dashboard, name="dashboard"),
     path("prekiu-pirkimas/", PurchaseListView.as_view(), name="purchase-list"),
+    path("prekiu-pirkimas/pdf/", PurchaseDailyPdfView.as_view(), name="purchase-daily-pdf"),
     path("prekiu-pirkimas/naujas/", PurchaseCreateView.as_view(), name="purchase-create"),
     path("prekiu-pirkimas/<int:pk>/redaguoti/", PurchaseUpdateView.as_view(), name="purchase-update"),
     path("prekiu-pirkimas/<int:pk>/istrinti/", PurchaseDeleteView.as_view(), name="purchase-delete"),

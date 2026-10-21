@@ -14,3 +14,5 @@ htmlcov/
 .pytest_cache/
 .codex-remote-attachments/
 arduino/PamarioKlumpeClockTerminal/secrets.h
+output/pdf/
+tmp/pdfs/

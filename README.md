@@ -78,7 +78,7 @@ Vietinis puslapis: `http://127.0.0.1:8020/valdyti/prekiu-pirkimas/`.
 Produkcijoje po diegimo: `https://valdyti.pamarioklumpe.lt/prekiu-pirkimas/`.
 
 - Rankinis prekių iš čekių įvedimas, redagavimas ir trynimas.
-- Kategorijos: Mėsa, Daržovės, Kita. Parduotuvės: Lidl, Norfa, Maxima, Iki.
+- Kategorijos: Mėsa, Daržovės, Kita. Parduotuvės: Lidl, Norfa, Maxima, Iki ir kitos prekybos vietos.
 - Saugoma data, prekė, kiekis (kg, vnt. arba l), vieneto kaina, galutinė sumokėta suma ir čekio žyma.
 - Vienodos prekės su tuo pačiu matavimo vienetu sujungiamos suvestinėje; pirminiai įrašai lieka išskleidžiami.
 - Vidutinė vieneto kaina skaičiuojama iš sumokėtos sumos ir kiekio. Visos sumos su PVM, po nuolaidų.
@@ -86,6 +86,11 @@ Produkcijoje po diegimo: `https://valdyti.pamarioklumpe.lt/prekiu-pirkimas/`.
 - Datos su duomenimis pateikiamos pasirinkime; numatyta naujausia įvesta diena.
 - Reikalinga migracija `0007_purchase`. Paprastiems vartotojams reikia suteikti `Purchase` modelio teises; supervartotojas jas turi automatiškai.
 - Nuotraukų automatinis nuskaitymas šiame etape neįtrauktas: pirmiausia įvedami iš pateiktų čekių patikrinti duomenys.
+- Jei čekyje kiekis ar vieneto kaina nenurodyti, laukai gali likti tušti. Suvestinėje tada rodoma „—“, ne išgalvotas svoris.
+- Čekio apvalinimas ar mokėjimas lojalumo pinigais įrašomas kaip mokėjimo korekcija prie vienos čekio eilutės. Prekių savikaina lieka atskirta nuo faktiškai sumokėtos sumos.
+- Patikrintus čekių duomenis galima įkelti komanda `python manage.py import_purchase_receipts <failas.json> --dry-run`, o po patikros pakartoti be `--dry-run`. Importas patikrina kiekvieno čekio prekių ir mokėjimo sumas; pakartotinis identiško čekio importas nedubliuoja įrašų. Pirminius JSON ir nuotraukas laikykite ignoruojamame `media/purchase-imports/` kataloge.
+- „Dienos PDF“ atsisiunčia pasirinktos datos A4 ataskaitą su kategorijų ir parduotuvių suvestinėmis. Didesnės ataskaitos automatiškai tęsiamos kitame A4 puslapyje su pakartotomis lentelių antraštėmis. PDF naudoja į projektą įtrauktą lietuvišką raides palaikantį DejaVu šriftą ir `reportlab`, todėl papildomų Linux sisteminių PDF bibliotekų nereikia.
+- PDF testams įdiekite kūrimo priklausomybes: `python -m pip install -r requirements-dev.txt`.
 
 ## Arduino darbo laiko terminalas
 

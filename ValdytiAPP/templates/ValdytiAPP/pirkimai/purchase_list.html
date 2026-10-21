@@ -5,7 +5,10 @@
 <link rel="stylesheet" href="{% static 'ValdytiAPP/css/purchases.css' %}">
 <div class="page-heading split">
     <div><p class="eyebrow">Pirkimai</p><h1>Prekių pirkimas</h1><p>Nupirktos prekės ir išlaidos pagal čekius.</p></div>
-    {% if perms.valdyti.add_purchase %}<a class="button button-primary" href="{% url 'purchase-create' %}?date={{ selected_date|date:'Y-m-d' }}">+ Pridėti pirkimą</a>{% endif %}
+    <div class="button-group">
+        <a class="button button-secondary" href="{% url 'purchase-daily-pdf' %}?date={{ selected_date|date:'Y-m-d' }}">Dienos PDF · {{ selected_date|date:'Y-m-d' }}</a>
+        {% if perms.valdyti.add_purchase %}<a class="button button-primary" href="{% url 'purchase-create' %}?date={{ selected_date|date:'Y-m-d' }}">+ Pridėti pirkimą</a>{% endif %}
+    </div>
 </div>
 
 <form method="get" class="filter-bar purchase-filters">
@@ -32,13 +35,13 @@
         <thead><tr><th>Prekė</th><th class="purchase-number">Kiekis</th><th>Vnt.</th><th class="purchase-number">Vid. kaina / vnt.</th><th class="purchase-number">Suma</th></tr></thead>
         <tbody>
         {% for product in group.products %}
-        <tr><td><strong>{{ product.name }}</strong></td><td class="purchase-number">{{ product.quantity|floatformat:'-3' }}</td><td>{{ product.unit }}</td><td class="purchase-number">{{ product.average_price|floatformat:2 }} €</td><td class="purchase-number"><strong>{{ product.total|floatformat:2 }} €</strong></td></tr>
+        <tr><td><strong>{{ product.name }}</strong></td><td class="purchase-number">{% if product.quantity is not None %}{{ product.quantity|floatformat:'-3' }}{% else %}—{% endif %}</td><td>{{ product.unit|default:'—' }}</td><td class="purchase-number">{% if product.average_price is not None %}{{ product.average_price|floatformat:2 }} €{% else %}—{% endif %}</td><td class="purchase-number"><strong>{{ product.total|floatformat:2 }} €</strong></td></tr>
         <tr class="purchase-details-row"><td colspan="5"><details><summary>Pirkimo įrašai ({{ product.entries|length }})</summary>
             <div class="purchase-entry-list">
             {% for entry in product.entries %}
                 <div class="purchase-entry">
                     <div><strong>{{ entry.get_store_display }}</strong> · {{ entry.purchase_date|date:'Y-m-d' }}{% if entry.receipt_reference %}<small>Čekis: {{ entry.receipt_reference }}</small>{% endif %}{% if entry.notes %}<small>{{ entry.notes }}</small>{% endif %}</div>
-                    <div>{{ entry.quantity|floatformat:'-3' }} {{ entry.get_unit_display }} × {{ entry.unit_price|floatformat:'-4' }} €<small>Sumokėta: {{ entry.total|floatformat:2 }} €</small></div>
+                    <div>{% if entry.quantity is not None %}{{ entry.quantity|floatformat:'-3' }} {{ entry.get_unit_display }}{% else %}Kiekis nenurodytas{% endif %}{% if entry.unit_price is not None %} × {{ entry.unit_price|floatformat:'-4' }} €{% endif %}<small>Prekės suma: {{ entry.total|floatformat:2 }} €</small>{% if entry.payment_adjustment %}<small>Mokėjimo korekcija: {{ entry.payment_adjustment|floatformat:2 }} €</small>{% endif %}</div>
                     <div class="purchase-entry-actions">
                         {% if perms.valdyti.change_purchase %}<a href="{% url 'purchase-update' entry.pk %}">Redaguoti</a>{% endif %}
                         {% if perms.valdyti.delete_purchase %}<a href="{% url 'purchase-delete' entry.pk %}">Ištrinti</a>{% endif %}
@@ -58,8 +61,9 @@
     <div class="table-card"><table>
         <thead><tr><th>Parduotuvė</th><th class="purchase-number">Išleista</th></tr></thead>
         <tbody>{% for store in store_totals %}<tr><td>{{ store.name }}</td><td class="purchase-number">{{ store.total|floatformat:2 }} €</td></tr>{% endfor %}</tbody>
-        <tfoot><tr><th>Iš viso</th><td class="purchase-number"><strong>{{ grand_total|floatformat:2 }} €</strong></td></tr></tfoot>
+        <tfoot><tr><th>Iš viso sumokėta</th><td class="purchase-number"><strong>{{ grand_total|floatformat:2 }} €</strong></td></tr></tfoot>
     </table></div>
+    <p class="help-text">Prekių suma: {{ goods_total|floatformat:2 }} €. Mokėjimo korekcijos (apvalinimas, lojalumo pinigai): {{ payment_adjustments|floatformat:2 }} €.</p>
 </section>
 
 {% if period != 'day' %}
@@ -68,7 +72,7 @@
     <div class="table-card"><table>
         <thead><tr><th>Data</th>{% for store in store_totals %}<th class="purchase-number">{{ store.name }}</th>{% endfor %}<th class="purchase-number">Iš viso</th></tr></thead>
         <tbody>{% for day in daily_totals %}<tr><td><a href="{% url 'purchase-list' %}?date={{ day.date|date:'Y-m-d' }}">{{ day.date|date:'Y-m-d' }}</a></td>{% for amount in day.store_values %}<td class="purchase-number">{{ amount|floatformat:2 }} €</td>{% endfor %}<td class="purchase-number"><strong>{{ day.total|floatformat:2 }} €</strong></td></tr>
-        {% empty %}<tr><td colspan="6" class="empty-state">Pasirinktu laikotarpiu pirkimų nėra.</td></tr>{% endfor %}</tbody>
+        {% empty %}<tr><td colspan="7" class="empty-state">Pasirinktu laikotarpiu pirkimų nėra.</td></tr>{% endfor %}</tbody>
         <tfoot><tr><th>Iš viso</th>{% for store in store_totals %}<td class="purchase-number">{{ store.total|floatformat:2 }} €</td>{% endfor %}<td class="purchase-number"><strong>{{ grand_total|floatformat:2 }} €</strong></td></tr></tfoot>
     </table></div>
 </section>

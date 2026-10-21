@@ -228,6 +228,7 @@ class Purchase(models.Model):
         NORFA = "norfa", "Norfa"
         MAXIMA = "maxima", "Maxima"
         IKI = "iki", "Iki"
+        OTHER = "other", "Kitos prekybos vietos"
 
     class Unit(models.TextChoices):
         KG = "kg", "kg"
@@ -239,13 +240,18 @@ class Purchase(models.Model):
     category = models.CharField("Kategorija", max_length=12, choices=Category.choices)
     name = models.CharField("Prekės pavadinimas", max_length=255)
     quantity = models.DecimalField("Kiekis", max_digits=12, decimal_places=3,
+                                   blank=True, null=True,
                                    validators=[MinValueValidator(Decimal("0.001"))])
-    unit = models.CharField("Matavimo vienetas", max_length=3, choices=Unit.choices, default=Unit.KG)
+    unit = models.CharField("Matavimo vienetas", max_length=3, choices=Unit.choices, default=Unit.KG, blank=True)
     unit_price = models.DecimalField("Vieneto kaina (€)", max_digits=12, decimal_places=4,
+                                     blank=True, null=True,
                                      validators=[MinValueValidator(Decimal("0"))])
     total = models.DecimalField("Sumokėta suma (€)", max_digits=12, decimal_places=2,
                                 validators=[MinValueValidator(Decimal("0"))],
                                 help_text="Galutinė prekės suma iš čekio, pritaikius nuolaidas.")
+    payment_adjustment = models.DecimalField(
+        "Mokėjimo korekcija (€)", max_digits=12, decimal_places=2, default=Decimal("0.00"),
+        help_text="Čekio apvalinimas ar mokėjimas lojalumo pinigais. Įveskite tik prie vienos čekio prekės; priežastį nurodykite pastabose.")
     receipt_reference = models.CharField("Čekio numeris / žyma", max_length=120, blank=True)
     notes = models.TextField("Pastabos", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -266,6 +272,10 @@ class Purchase(models.Model):
         self.name = " ".join(self.name.split())
         if not self.name:
             raise ValidationError({"name": "Įveskite prekės pavadinimą."})
+        if self.quantity is not None and not self.unit:
+            raise ValidationError({"unit": "Nurodykite kiekio matavimo vienetą."})
+        if self.total is not None and self.payment_adjustment is not None and self.total + self.payment_adjustment < 0:
+            raise ValidationError({"payment_adjustment": "Sumokėta suma su korekcija negali būti neigiama."})
 
     def __str__(self):
         return f"{self.purchase_date} – {self.name} ({self.get_store_display()})"

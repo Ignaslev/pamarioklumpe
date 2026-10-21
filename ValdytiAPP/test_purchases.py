@@ -1,8 +1,12 @@
 from datetime import date
 from decimal import Decimal
+import json
+from io import StringIO
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.core.management import call_command, CommandError
 from django.test import TestCase
 from django.urls import reverse
 
@@ -41,7 +45,7 @@ class PurchaseTests(TestCase):
         self.assertEqual(len(product["entries"]), 2)
         self.assertEqual(response.context["grand_total"], Decimal("29.20"))
         self.assertEqual([s["total"] for s in response.context["store_totals"]],
-                         [Decimal("14.20"), Decimal("15"), Decimal("0"), Decimal("0")])
+                         [Decimal("14.20"), Decimal("15"), Decimal("0"), Decimal("0"), Decimal("0")])
         self.assertContains(response, "Prekių pirkimas")
         self.assertContains(response, reverse("purchase-update", args=[product["entries"][0].pk]))
 
@@ -79,10 +83,46 @@ class PurchaseTests(TestCase):
         self.assertEqual(response.context["available_dates"], [date(2026, 10, 21), date(2026, 10, 19)])
         self.assertEqual(self.report(date="invalid", period="invalid").status_code, 200)
 
-    def test_empty_day_still_shows_all_four_stores_and_zero_total(self):
+    def test_empty_day_shows_all_stores_and_zero_total(self):
         response = self.report(date="2026-10-21")
         self.assertEqual(response.context["grand_total"], Decimal("0"))
-        self.assertEqual(len(response.context["store_totals"]), 4)
+        self.assertEqual(len(response.context["store_totals"]), 5)
+
+    def test_unknown_quantity_and_payment_adjustment_do_not_distort_product_cost(self):
+        self.purchase(name="Svogūnų laiškai", quantity=None, unit="", unit_price=None,
+                      store="other", category="vegetables", total=Decimal("6.65"))
+        self.purchase(payment_adjustment=Decimal("-0.12"))
+        response = self.report(date="2026-10-21")
+        product = response.context["purchase_groups"][1]["products"][0]
+        self.assertIsNone(product["quantity"])
+        self.assertIsNone(product["average_price"])
+        self.assertEqual(response.context["goods_total"], Decimal("16.65"))
+        self.assertEqual(response.context["grand_total"], Decimal("16.53"))
+        self.assertContains(response, "Kiekis nenurodytas")
+
+    def test_receipt_import_checks_totals_and_is_repeatable_without_duplicates(self):
+        receipt = {
+            "date": "2026-10-21", "store": "lidl", "reference": "TEST-RECEIPT",
+            "goods_total": "10.00", "paid_total": "9.99", "payment_adjustment": "-0.01",
+            "items": [{"name": "Mėsa", "category": "meat", "quantity": "2.000",
+                       "unit": "kg", "unit_price": "5.00", "total": "10.00"}],
+        }
+        def run(data, **options):
+            with patch("ValdytiAPP.management.commands.import_purchase_receipts.Path.read_text",
+                       return_value=json.dumps({"receipts": [data]})):
+                call_command("import_purchase_receipts", "unused.json", stdout=StringIO(), **options)
+        run(receipt, dry_run=True)
+        self.assertEqual(Purchase.objects.count(), 0)
+        run(receipt)
+        run(receipt)
+        self.assertEqual(Purchase.objects.count(), 1)
+        with self.assertRaises(CommandError):
+            run({**receipt, "paid_total": "999.00"})
+        self.assertEqual(Purchase.objects.count(), 1)
+        changed = {**receipt, "items": [{**receipt["items"][0], "name": "Pakeista"}]}
+        with self.assertRaises(CommandError):
+            run(changed)
+        self.assertEqual(Purchase.objects.get().name, "Mėsa")
 
     def test_create_edit_delete_and_add_another(self):
         data = dict(purchase_date="2026-10-21", store="iki", category="meat",
