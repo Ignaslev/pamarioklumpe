@@ -8,6 +8,7 @@ __pycache__/
 venv/
 staticfiles/
 media/
+private_media/
 *.log
 .coverage
 htmlcov/
@@ -16,3 +17,4 @@ htmlcov/
 arduino/PamarioKlumpeClockTerminal/secrets.h
 output/pdf/
 tmp/pdfs/
+tmp/receipt-tests/

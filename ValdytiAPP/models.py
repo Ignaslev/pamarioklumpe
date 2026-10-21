@@ -5,6 +5,8 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 
+from .receipt_storage import PrivateReceiptStorage
+
 
 def normalize_chip_uid(value):
     """Store RFID UIDs in one stable form regardless of spaces or separators."""
@@ -253,6 +255,8 @@ class Purchase(models.Model):
         "Mokėjimo korekcija (€)", max_digits=12, decimal_places=2, default=Decimal("0.00"),
         help_text="Čekio apvalinimas ar mokėjimas lojalumo pinigais. Įveskite tik prie vienos čekio prekės; priežastį nurodykite pastabose.")
     receipt_reference = models.CharField("Čekio numeris / žyma", max_length=120, blank=True)
+    receipt = models.ForeignKey("PurchaseReceipt", on_delete=models.CASCADE, related_name="purchases",
+                                blank=True, null=True, verbose_name="Čekis")
     notes = models.TextField("Pastabos", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -279,3 +283,54 @@ class Purchase(models.Model):
 
     def __str__(self):
         return f"{self.purchase_date} – {self.name} ({self.get_store_display()})"
+
+
+def receipt_upload_path(instance, filename):
+    from uuid import uuid4
+    from pathlib import Path
+    from django.utils import timezone
+
+    return f"purchase_receipts/{timezone.now():%Y/%m}/{uuid4().hex}{Path(filename).suffix.lower()}"
+
+
+class PurchaseReceipt(models.Model):
+    class Status(models.TextChoices):
+        UPLOADED = "uploaded", "Laukia nuskaitymo"
+        PROCESSING = "processing", "Nuskaitomas"
+        READY = "ready", "Įtraukta į pirkimus"
+        REVIEW = "review", "Reikia patikrinti"
+        FAILED = "failed", "Nepavyko nuskaityti"
+        DUPLICATE = "duplicate", "Dublikatas"
+
+    source_file = models.FileField("Čekio originalas", upload_to=receipt_upload_path, storage=PrivateReceiptStorage())
+    original_filename = models.CharField(max_length=255)
+    file_hash = models.CharField(max_length=64, unique=True)
+    business_key = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    duplicate_of = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.UPLOADED, db_index=True)
+    purchase_date = models.DateField("Data", null=True, blank=True, db_index=True)
+    store = models.CharField("Parduotuvė", max_length=10, choices=Purchase.Store.choices, blank=True)
+    store_name = models.CharField("Pardavėjo pavadinimas", max_length=255, blank=True)
+    store_address = models.CharField("Parduotuvės adresas", max_length=255, blank=True)
+    receipt_number = models.CharField("Čekio numeris", max_length=120, blank=True)
+    goods_total = models.DecimalField("Prekių suma po nuolaidų (€)", max_digits=12, decimal_places=2, null=True, blank=True)
+    paid_total = models.DecimalField("Sumokėta pinigais (€)", max_digits=12, decimal_places=2, null=True, blank=True)
+    payment_adjustment = models.DecimalField("Apvalinimas / lojalumo pinigai (€)", max_digits=12, decimal_places=2, default=Decimal("0"))
+    raw_extraction = models.JSONField(default=dict, blank=True)
+    extracted_lines = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    error_message = models.TextField(blank=True)
+    parser_model = models.CharField(max_length=100, blank=True)
+    processing_started_at = models.DateTimeField(null=True, blank=True)
+    processing_attempt = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at", "-pk")
+        verbose_name = "Pirkimo čekis"
+        verbose_name_plural = "Pirkimo čekiai"
+
+    def __str__(self):
+        return self.receipt_number or self.original_filename

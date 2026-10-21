@@ -1,0 +1,33 @@
+{% extends "ValdytiAPP/base.html" %}
+{% load static %}
+{% block title %}Čekis — Pamario Klumpė{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'ValdytiAPP/css/purchases.css' %}">
+<div class="page-heading split"><div><a class="back-link" href="{% url 'receipt-upload' %}">← Čekiai</a><h1>Čekio peržiūra</h1><p>{{ receipt.original_filename }} · {{ receipt.get_status_display }}</p></div><div class="button-group"><a class="button button-secondary" href="{% url 'receipt-original' receipt.pk %}">Atsisiųsti originalą</a>{% if receipt.purchase_date %}<a class="button button-secondary" href="{% url 'purchase-list' %}?date={{ receipt.purchase_date|date:'Y-m-d' }}">Dienos pirkimai</a>{% endif %}</div></div>
+{% if receipt.error_message %}<div class="message error">{{ receipt.error_message }}</div>{% endif %}
+{% if receipt.warnings %}<div class="message"><strong>Patikrinkite:</strong><ul>{% for warning in receipt.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></div>{% endif %}
+{% for error in errors %}<div class="message error">{{ error }}</div>{% endfor %}
+<details class="receipt-original-preview"><summary>Rodyti čekio nuotrauką</summary><a href="{% url 'receipt-original' receipt.pk %}?inline=1" target="_blank" rel="noopener"><img src="{% url 'receipt-original' receipt.pk %}?inline=1" alt="Čekio originalas: {{ receipt.original_filename }}" loading="lazy"></a><p class="help-text">Spustelėkite nuotrauką, jei norite atsidaryti visu dydžiu.</p></details>
+{% if receipt.status == 'duplicate' %}<p>Prekės iš šios nuotraukos papildomai neįtrauktos.{% if receipt.duplicate_of_id %} <a href="{% url 'receipt-review' receipt.duplicate_of_id %}">Atidaryti jau įtrauktą čekį</a>.{% endif %}</p>{% endif %}
+<p class="help-text">Kiekiai ir kainos gali likti tušti, jei jų čekyje nėra. Prekių sumos rašomos po nuolaidų, su PVM. Mokėjimo korekcija: apvalinimas ir panaudoti lojalumo pinigai (su minuso ženklu).</p>
+<form method="post" class="form-card" id="receipt-review-form">{% csrf_token %}
+    {{ form.non_field_errors }}
+    <div class="form-grid">{% for field in form %}<div class="form-field"><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>{{ field }}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>{% endfor %}</div>
+    <h2>Prekės</h2>{{ formset.management_form }}{{ formset.non_form_errors }}
+    <div id="receipt-lines">{% for line in formset %}<div class="receipt-line-form">{{ line.non_field_errors }}<div class="form-grid">{% for field in line %}<div class="form-field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>{% endfor %}</div></div>{% endfor %}</div>
+    <template id="receipt-empty-line"><div class="receipt-line-form"><div class="form-grid">{% for field in formset.empty_form %}<div class="form-field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>{% endfor %}</div></div></template>
+    {% if can_edit and receipt.status != 'processing' and receipt.status != 'duplicate' %}
+    <div class="form-actions"><button type="button" id="receipt-add-line" class="button button-secondary">+ Pridėti eilutę</button><button class="button button-primary" type="submit">Išsaugoti ir įtraukti į pirkimus</button></div>
+    {% endif %}
+</form>
+{% if perms.valdyti.delete_purchase %}<form method="post" action="{% url 'receipt-delete' receipt.pk %}" class="receipt-delete-form" onsubmit="return confirm('Ištrinti čekį, originalą ir visas jo pirkimo eilutes?');">{% csrf_token %}<button class="button button-secondary" type="submit">Ištrinti visą čekį ir jo prekes</button></form>{% endif %}
+<script>
+document.getElementById('receipt-add-line')?.addEventListener('click', function () {
+    const total = document.getElementById('id_lines-TOTAL_FORMS');
+    if (Number(total.value) >= 500) return;
+    const html = document.getElementById('receipt-empty-line').innerHTML.replaceAll('__prefix__', total.value);
+    document.getElementById('receipt-lines').insertAdjacentHTML('beforeend', html);
+    total.value = Number(total.value) + 1;
+});
+</script>
+{% endblock %}

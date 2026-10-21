@@ -6,6 +6,7 @@ from django.urls import path
 
 from . import views
 from .purchase_views import PurchaseCreateView, PurchaseDailyPdfView, PurchaseDeleteView, PurchaseListView, PurchaseUpdateView
+from .receipt_views import ReceiptDeleteView, ReceiptOriginalView, ReceiptProcessView, ReceiptReviewView, ReceiptUploadView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -13,6 +14,11 @@ urlpatterns = [
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("", views.dashboard, name="dashboard"),
     path("prekiu-pirkimas/", PurchaseListView.as_view(), name="purchase-list"),
+    path("prekiu-pirkimas/cekiai/", ReceiptUploadView.as_view(), name="receipt-upload"),
+    path("prekiu-pirkimas/cekiai/<int:pk>/nuskaityti/", ReceiptProcessView.as_view(), name="receipt-process"),
+    path("prekiu-pirkimas/cekiai/<int:pk>/", ReceiptReviewView.as_view(), name="receipt-review"),
+    path("prekiu-pirkimas/cekiai/<int:pk>/originalas/", ReceiptOriginalView.as_view(), name="receipt-original"),
+    path("prekiu-pirkimas/cekiai/<int:pk>/istrinti/", ReceiptDeleteView.as_view(), name="receipt-delete"),
     path("prekiu-pirkimas/pdf/", PurchaseDailyPdfView.as_view(), name="purchase-daily-pdf"),
     path("prekiu-pirkimas/naujas/", PurchaseCreateView.as_view(), name="purchase-create"),
     path("prekiu-pirkimas/<int:pk>/redaguoti/", PurchaseUpdateView.as_view(), name="purchase-update"),
