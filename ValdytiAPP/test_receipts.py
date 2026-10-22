@@ -12,6 +12,7 @@ from uuid import uuid4
 from PIL import Image
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -243,6 +244,155 @@ class ReceiptWorkflowTests(TestCase):
         receipt.save()
         self.process(receipt)
         self.assertEqual(receipt.status, "ready")
+
+    def processing_receipt(self, *, age=0, missing_start=False):
+        receipt = self.upload()
+        receipt.status = "processing"
+        receipt.processing_attempt = 1
+        receipt.processing_started_at = None if missing_start else timezone.now() - timedelta(minutes=age)
+        receipt.save()
+        return receipt
+
+    def test_status_recovers_stale_processing_without_calling_ai(self):
+        receipt = self.processing_receipt(age=6)
+        with patch("ValdytiAPP.receipt_views.parse_receipt_image") as parser:
+            response = self.client.get(reverse("receipt-status", args=[receipt.pk]))
+        parser.assert_not_called()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertEqual(response.json()["status"], "failed")
+        self.assertIn("nutrūko", response.json()["message"])
+        receipt.refresh_from_db()
+        self.assertEqual(receipt.processing_attempt, 2)
+        self.assertIsNone(receipt.processing_started_at)
+        self.assertTrue(Path(receipt.source_file.path).exists())
+        self.assertFalse(Purchase.objects.exists())
+
+    def test_loading_list_or_review_recovers_abandoned_requests(self):
+        receipt = self.processing_receipt(age=6)
+        response = self.client.get(reverse("receipt-upload"))
+        self.assertContains(response, "nutrūko")
+        receipt.refresh_from_db()
+        self.assertEqual(receipt.status, "failed")
+        receipt.status, receipt.processing_started_at = "processing", None
+        receipt.save()
+        response = self.client.get(reverse("receipt-review", args=[receipt.pk]))
+        self.assertContains(response, "nutrūko")
+        self.assertNotContains(response, 'id="receipt-processing"')
+        receipt.refresh_from_db()
+        self.assertEqual(receipt.status, "failed")
+
+    def test_active_status_not_expired_and_cancel_is_available(self):
+        receipt = self.processing_receipt()
+        response = self.client.get(reverse("receipt-status", args=[receipt.pk]))
+        self.assertEqual(response.json()["status"], "processing")
+        self.assertContains(self.client.get(reverse("receipt-upload")), "Atšaukti nuskaitymą")
+        self.assertContains(self.client.get(reverse("receipt-review", args=[receipt.pk])), 'id="receipt-processing"')
+
+    def test_cancel_invalidates_attempt_and_preserves_original(self):
+        receipt = self.processing_receipt()
+        url = reverse("receipt-cancel", args=[receipt.pk])
+        response = self.client.post(url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(response.json()["status"], "failed")
+        self.assertEqual(response.json()["attempt"], 2)
+        receipt.refresh_from_db()
+        self.assertIsNone(receipt.processing_started_at)
+        self.assertTrue(Path(receipt.source_file.path).exists())
+        self.assertFalse(receipt.purchases.exists())
+        # Repeated cancellation is harmless; a regular HTML form redirects back to review.
+        self.assertEqual(self.client.post(url).status_code, 302)
+        receipt.refresh_from_db()
+        self.assertEqual(receipt.processing_attempt, 2)
+        self.process(receipt)
+        self.assertEqual(receipt.status, "ready")
+
+    def test_cancel_cannot_modify_already_included_receipt(self):
+        receipt = self.upload()
+        self.process(receipt)
+        response = self.client.post(reverse("receipt-cancel", args=[receipt.pk]), HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(response.json()["status"], "ready")
+        self.assertEqual(receipt.purchases.count(), 1)
+
+    def test_cancelled_inflight_success_is_discarded(self):
+        receipt = self.upload()
+        def answer_after_cancel(_):
+            response = self.client.post(reverse("receipt-cancel", args=[receipt.pk]), HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+            self.assertEqual(response.json()["status"], "failed")
+            return sample_receipt(), "test"
+        with patch("ValdytiAPP.receipt_views.parse_receipt_image", side_effect=answer_after_cancel):
+            response = self.client.post(reverse("receipt-process", args=[receipt.pk]))
+        self.assertEqual(response.json()["status"], "failed")
+        receipt.refresh_from_db()
+        self.assertIn("atšauktas", receipt.error_message)
+        self.assertFalse(Purchase.objects.exists())
+
+    def test_late_failure_does_not_overwrite_cancellation(self):
+        receipt = self.upload()
+        def fail_after_cancel(_):
+            self.client.post(reverse("receipt-cancel", args=[receipt.pk]))
+            raise ReceiptParserError("Old API error")
+        with patch("ValdytiAPP.receipt_views.parse_receipt_image", side_effect=fail_after_cancel):
+            response = self.client.post(reverse("receipt-process", args=[receipt.pk]))
+        self.assertEqual(response.status_code, 422)
+        receipt.refresh_from_db()
+        self.assertIn("atšauktas", receipt.error_message)
+        self.assertNotIn("Old API error", receipt.error_message)
+
+    def test_cancel_before_claim_rejects_old_browser_attempt(self):
+        receipt = self.upload()
+        self.client.post(reverse("receipt-cancel", args=[receipt.pk]))
+        with patch("ValdytiAPP.receipt_views.parse_receipt_image") as parser:
+            response = self.client.post(reverse("receipt-process", args=[receipt.pk]), {"expected_attempt": "0"})
+        self.assertEqual(response.status_code, 409)
+        parser.assert_not_called()
+        self.assertFalse(Purchase.objects.exists())
+
+    def test_late_old_result_cannot_replace_successful_retry(self):
+        receipt = self.upload()
+        def retry_before_old_answer(_):
+            self.client.post(reverse("receipt-cancel", args=[receipt.pk]))
+            with patch("ValdytiAPP.receipt_views.parse_receipt_image", return_value=(sample_receipt(receipt_number="NEW"), "new-test")):
+                retry = self.client.post(reverse("receipt-process", args=[receipt.pk]))
+            self.assertEqual(retry.json()["status"], "ready")
+            return sample_receipt(receipt_number="OLD"), "old-test"
+        with patch("ValdytiAPP.receipt_views.parse_receipt_image", side_effect=retry_before_old_answer):
+            response = self.client.post(reverse("receipt-process", args=[receipt.pk]))
+        self.assertEqual(response.json()["status"], "ready")
+        receipt.refresh_from_db()
+        self.assertEqual(receipt.receipt_number, "NEW")
+        self.assertEqual(receipt.purchases.count(), 1)
+
+    def test_deleting_active_receipt_discards_late_success_or_failure(self):
+        for fail in (False, True):
+            with self.subTest(fail=fail):
+                receipt = self.upload("red" if fail else "white")
+                path = Path(receipt.source_file.path)
+                def answer_after_delete(_):
+                    with self.captureOnCommitCallbacks(execute=True):
+                        response = self.client.post(reverse("receipt-delete", args=[receipt.pk]))
+                    self.assertEqual(response.status_code, 302)
+                    if fail:
+                        raise ReceiptParserError("Too late")
+                    return sample_receipt(), "test"
+                with patch("ValdytiAPP.receipt_views.parse_receipt_image", side_effect=answer_after_delete):
+                    response = self.client.post(reverse("receipt-process", args=[receipt.pk]))
+                self.assertEqual(response.status_code, 410)
+                self.assertFalse(PurchaseReceipt.objects.filter(pk=receipt.pk).exists())
+                self.assertFalse(path.exists())
+                self.assertFalse(Purchase.objects.exists())
+
+    def test_status_and_cancellation_permissions_and_safe_methods(self):
+        receipt = self.processing_receipt()
+        url = reverse("receipt-cancel", args=[receipt.pk])
+        self.assertEqual(self.client.get(url).status_code, 405)
+        viewer = get_user_model().objects.create_user("receipt-viewer")
+        viewer.user_permissions.add(Permission.objects.get(content_type__app_label="valdyti", codename="view_purchase"))
+        self.client.force_login(viewer)
+        self.assertEqual(self.client.get(reverse("receipt-status", args=[receipt.pk])).status_code, 200)
+        self.assertEqual(self.client.post(url).status_code, 403)
+        self.assertEqual(self.client.post(reverse("receipt-delete", args=[receipt.pk])).status_code, 403)
+        receipt.refresh_from_db()
+        self.assertEqual(receipt.status, "processing")
 
     def test_review_corrects_draft_and_saving_twice_replaces_not_appends(self):
         receipt = self.upload()

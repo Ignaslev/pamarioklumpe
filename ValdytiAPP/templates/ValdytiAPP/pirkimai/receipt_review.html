@@ -7,6 +7,12 @@
 {% if receipt.error_message %}<div class="message error">{{ receipt.error_message }}</div>{% endif %}
 {% if receipt.warnings %}<div class="message"><strong>Patikrinkite:</strong><ul>{% for warning in receipt.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></div>{% endif %}
 {% for error in errors %}<div class="message error">{{ error }}</div>{% endfor %}
+{% if receipt.status == 'processing' %}
+<div class="message" id="receipt-processing" data-status-url="{% url 'receipt-status' receipt.pk %}"><p>Būsena tikrinama automatiškai. Jei užklausa nutrūko, po 5 minučių čekis bus atlaisvintas pakartotiniam nuskaitymui arba trynimui.</p>
+{% if perms.valdyti.add_purchase %}<form method="post" action="{% url 'receipt-cancel' receipt.pk %}">{% csrf_token %}<button type="submit" class="button button-secondary">Atšaukti nuskaitymą</button></form>{% endif %}
+<p class="help-text">Atšaukimas išsaugo originalą ir neleidžia įtraukti pavėluoto rezultato. Jau išsiųsta OpenAI užklausa gali baigtis ir būti apmokestinta.</p></div>
+<script src="{% static 'ValdytiAPP/js/receipt_status.js' %}" defer></script>
+{% endif %}
 <details class="receipt-original-preview"><summary>Rodyti čekio nuotrauką</summary><a href="{% url 'receipt-original' receipt.pk %}?inline=1" target="_blank" rel="noopener"><img src="{% url 'receipt-original' receipt.pk %}?inline=1" alt="Čekio originalas: {{ receipt.original_filename }}" loading="lazy"></a><p class="help-text">Spustelėkite nuotrauką, jei norite atsidaryti visu dydžiu.</p></details>
 {% if receipt.status == 'duplicate' %}<p>Prekės iš šios nuotraukos papildomai neįtrauktos.{% if receipt.duplicate_of_id %} <a href="{% url 'receipt-review' receipt.duplicate_of_id %}">Atidaryti jau įtrauktą čekį</a>.{% endif %}</p>{% endif %}
 <p class="help-text">Kiekiai ir kainos gali likti tušti, jei jų čekyje nėra. Prekių sumos rašomos po nuolaidų, su PVM. Mokėjimo korekcija: apvalinimas ir panaudoti lojalumo pinigai (su minuso ženklu).</p>
@@ -20,7 +26,7 @@
     <div class="form-actions"><button type="button" id="receipt-add-line" class="button button-secondary">+ Pridėti eilutę</button><button class="button button-primary" type="submit">Išsaugoti ir įtraukti į pirkimus</button></div>
     {% endif %}
 </form>
-{% if perms.valdyti.delete_purchase %}<form method="post" action="{% url 'receipt-delete' receipt.pk %}" class="receipt-delete-form" onsubmit="return confirm('Ištrinti čekį, originalą ir visas jo pirkimo eilutes?');">{% csrf_token %}<button class="button button-secondary" type="submit">Ištrinti visą čekį ir jo prekes</button></form>{% endif %}
+{% if perms.valdyti.delete_purchase %}<form method="post" action="{% url 'receipt-delete' receipt.pk %}" class="receipt-delete-form" onsubmit="return confirm('Ištrinti čekį, originalą ir visas jo pirkimo eilutes? Jei nuskaitymas dar vyksta, jo rezultatas nebus įtrauktas.');">{% csrf_token %}<button class="button button-secondary" type="submit">Ištrinti visą čekį ir jo prekes</button></form>{% endif %}
 <script>
 document.getElementById('receipt-add-line')?.addEventListener('click', function () {
     const total = document.getElementById('id_lines-TOTAL_FORMS');

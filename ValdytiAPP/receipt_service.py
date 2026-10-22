@@ -1,17 +1,31 @@
 import hashlib
 import json
 import re
+from datetime import timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import IntegrityError, transaction
+from django.db.models import F, Q
+from django.utils import timezone
 
 from .models import Purchase, PurchaseReceipt
 
 
 class ReceiptSaveError(Exception):
     pass
+
+
+def expire_processing_receipts(queryset=None):
+    """Recover abandoned requests and invalidate any late result from their worker."""
+    queryset = PurchaseReceipt.objects.all() if queryset is None else queryset
+    return queryset.filter(status=PurchaseReceipt.Status.PROCESSING).filter(
+        Q(processing_started_at__lte=timezone.now() - timedelta(minutes=5)) |
+        Q(processing_started_at__isnull=True)
+    ).update(status=PurchaseReceipt.Status.FAILED, processing_started_at=None,
+             processing_attempt=F("processing_attempt") + 1, updated_at=timezone.now(),
+             error_message="Nuskaitymas užtruko per ilgai arba nutrūko. Originalas išsaugotas. Galite bandyti dar kartą arba ištrinti čekį.")
 
 
 def json_values(value):

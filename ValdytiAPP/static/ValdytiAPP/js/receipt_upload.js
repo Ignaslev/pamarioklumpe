@@ -7,13 +7,21 @@
     const queue = document.getElementById('receipt-queue');
     const csrf = form.querySelector('[name=csrfmiddlewaretoken]').value;
     let busy = false;
+    const watching = new Map();
+
+    function cardFrom(root) {
+        return {root, status: root.querySelector('.receipt-row-status') || root.children[1],
+            message: root.querySelector('.receipt-row-message') || root.querySelector('p'),
+            date: root.querySelector('.receipt-row-date'),
+            actions: root.querySelector('.receipt-row-actions') || root.querySelector('.button-group')};
+    }
 
     async function post(url, body) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 150000);
         try {
             const response = await fetch(url, {method: 'POST', body, signal: controller.signal,
-                credentials: 'same-origin', headers: {'X-CSRFToken': csrf}});
+                credentials: 'same-origin', headers: {'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest'}});
             if (response.redirected) throw new Error('Sesija baigėsi. Prisijunkite iš naujo ir atnaujinkite čekių sąrašą.');
             let data;
             try { data = await response.json(); }
@@ -24,20 +32,55 @@
     }
 
     function show(card, data) {
+        watching.delete(card.root);
         card.status.textContent = data.label;
         card.message.textContent = data.message || '';
+        if (card.date) card.date.textContent = data.date || '—';
         card.actions.replaceChildren();
         const link = document.createElement('a');
         link.href = data.review_url;
         link.textContent = data.status === 'review' ? 'Patikrinti ir pataisyti' : 'Peržiūrėti čekį';
         card.actions.append(link);
-        if (['uploaded', 'failed', 'processing'].includes(data.status)) {
+        if (['uploaded', 'failed'].includes(data.status)) {
             const button = document.createElement('button');
             button.type = 'button'; button.className = 'button button-secondary receipt-retry';
             button.dataset.url = data.process_url; button.textContent = 'Bandyti nuskaityti';
+            button.dataset.statusUrl = data.status_url; button.dataset.cancelUrl = data.cancel_url;
+            button.dataset.attempt = data.attempt;
             card.actions.append(button);
         }
+        if (data.status === 'processing') {
+            const button = document.createElement('button');
+            button.type = 'button'; button.className = 'button button-secondary receipt-cancel';
+            button.dataset.url = data.cancel_url; button.textContent = 'Atšaukti nuskaitymą';
+            card.actions.append(button);
+            watching.set(card.root, {card, url: data.status_url});
+        }
     }
+
+    async function refreshStatus(entry) {
+        if (entry.pending) return;
+        entry.pending = true;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+            const response = await fetch(entry.url, {credentials: 'same-origin', cache: 'no-store', signal: controller.signal});
+            if (response.redirected) return;
+            if (response.status === 404 || response.status === 410) {
+                if (watching.get(entry.card.root) !== entry) return;
+                watching.delete(entry.card.root);
+                entry.card.status.textContent = 'Čekis ištrintas'; entry.card.actions.replaceChildren(); return;
+            }
+            if (!response.ok) return;
+            const data = await response.json();
+            if (watching.get(entry.card.root) === entry) show(entry.card, data);
+        } catch { /* A transient connection failure must not restart the paid AI request. */ }
+        finally { entry.pending = false; clearTimeout(timeout); }
+    }
+    for (const root of document.querySelectorAll('tr[data-status="processing"]')) {
+        watching.set(root, {card: cardFrom(root), url: root.dataset.statusUrl});
+    }
+    setInterval(() => { for (const entry of watching.values()) refreshStatus(entry); }, 5000);
 
     form.addEventListener('submit', async event => {
         event.preventDefault();
@@ -61,7 +104,7 @@
                 const message = document.createElement('p');
                 const actions = document.createElement('div'); actions.className = 'button-group';
                 root.append(title, status, message, actions); queue.append(root);
-                const card = {status, message, actions};
+                const card = {root, status, message, actions};
                 try {
                     const payload = new FormData(); payload.append('image', files[i]);
                     const data = await post(form.dataset.url, payload);
@@ -77,7 +120,8 @@
                 try {
                     if (processed.has(data.id)) { card.status.textContent = 'Tas pats čekis jau apdorotas šiame įkėlime'; continue; }
                     processed.add(data.id);
-                    show(card, await post(data.process_url));
+                    show(card, {...data, status: 'processing', label: 'AI nuskaito čekį...'});
+                    show(card, await post(data.process_url, new URLSearchParams({expected_attempt: data.attempt})));
                 } catch (error) {
                     card.status.textContent = 'Nuskaitymas nutrūko';
                     card.message.textContent = error.message + ' Originalas išsaugotas; atnaujinkite čekių sąrašą.';
@@ -88,15 +132,25 @@
     });
 
     document.addEventListener('click', async event => {
+        const cancel = event.target.closest('.receipt-cancel');
+        if (cancel) {
+            cancel.disabled = true;
+            const card = cardFrom(cancel.closest('.receipt-queue-item, tr'));
+            try { show(card, await post(cancel.dataset.url)); }
+            catch (error) { card.message.textContent = error.message; cancel.disabled = false; }
+            return;
+        }
         const button = event.target.closest('.receipt-retry');
         if (!button || busy) return;
         busy = true; button.disabled = true;
         const root = button.closest('.receipt-queue-item, tr');
-        const card = {status: root.querySelector('.receipt-row-status') || root.children[1],
-            message: root.querySelector('.receipt-row-message') || root.querySelector('p'),
-            actions: root.querySelector('.receipt-row-actions') || root.querySelector('.button-group')};
-        card.status.textContent = 'AI nuskaito čekį...';
-        try { show(card, await post(button.dataset.url)); }
+        const card = cardFrom(root);
+        const url = button.dataset.url;
+        const attempt = button.dataset.attempt;
+        show(card, {status: 'processing', label: 'AI nuskaito čekį...',
+            review_url: root.querySelector('a').href, status_url: button.dataset.statusUrl,
+            cancel_url: button.dataset.cancelUrl});
+        try { show(card, await post(url, new URLSearchParams({expected_attempt: attempt}))); }
         catch (error) { card.status.textContent = 'Nuskaitymas nutrūko'; card.message.textContent = error.message; }
         finally { busy = false; button.disabled = false; }
     });

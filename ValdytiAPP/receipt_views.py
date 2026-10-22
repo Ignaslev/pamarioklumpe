@@ -18,7 +18,7 @@ from django.views import View
 from .models import PurchaseReceipt
 from .receipt_forms import ReceiptDetailsForm, ReceiptLineFormSet, ReceiptUploadForm
 from .receipt_parser import ReceiptParserError, inspect_receipt_image, normalized_receipt, parse_receipt_image
-from .receipt_service import ReceiptSaveError, include_receipt, json_values, validate_receipt_lines
+from .receipt_service import ReceiptSaveError, expire_processing_receipts, include_receipt, json_values, validate_receipt_lines
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,9 @@ def receipt_json(receipt):
         "process_url": reverse("receipt-process", args=[receipt.pk]),
         "review_url": reverse("receipt-review", args=[receipt.pk]),
         "original_url": reverse("receipt-original", args=[receipt.pk]),
+        "status_url": reverse("receipt-status", args=[receipt.pk]),
+        "cancel_url": reverse("receipt-cancel", args=[receipt.pk]),
+        "attempt": receipt.processing_attempt,
     }
 
 
@@ -38,6 +41,7 @@ class ReceiptUploadView(LoginRequiredMixin, PermissionRequiredMixin, View):
     permission_required = "valdyti.add_purchase"
 
     def get(self, request):
+        expire_processing_receipts()
         return render(request, "ValdytiAPP/pirkimai/receipt_upload.html", {
             "receipts": PurchaseReceipt.objects.all()[:60], "max_files": settings.RECEIPT_BATCH_MAX_FILES,
             "max_mb": settings.RECEIPT_UPLOAD_MAX_BYTES // 1024 // 1024,
@@ -54,6 +58,7 @@ class ReceiptUploadView(LoginRequiredMixin, PermissionRequiredMixin, View):
         upload = form.cleaned_data["image"]
         content = upload.read()
         digest = hashlib.sha256(content).hexdigest()
+        expire_processing_receipts(PurchaseReceipt.objects.filter(file_hash=digest))
         existing = PurchaseReceipt.objects.filter(file_hash=digest).first()
         if existing:
             return JsonResponse({**receipt_json(existing), "existing": True})
@@ -81,7 +86,11 @@ class ReceiptProcessView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     def post(self, request, pk):
         with transaction.atomic():
+            expire_processing_receipts(PurchaseReceipt.objects.filter(pk=pk))
             receipt = get_object_or_404(PurchaseReceipt.objects.select_for_update(), pk=pk)
+            expected_attempt = request.POST.get("expected_attempt")
+            if expected_attempt is not None and expected_attempt != str(receipt.processing_attempt):
+                return JsonResponse({**receipt_json(receipt), "message": "Čekio būsena pasikeitė. Nuskaitymas nepradėtas."}, status=409)
             if receipt.status in {PurchaseReceipt.Status.READY, PurchaseReceipt.Status.DUPLICATE, PurchaseReceipt.Status.REVIEW}:
                 return JsonResponse(receipt_json(receipt))
             if (receipt.status == PurchaseReceipt.Status.PROCESSING and receipt.processing_started_at
@@ -99,7 +108,9 @@ class ReceiptProcessView(LoginRequiredMixin, PermissionRequiredMixin, View):
             raw, model = parse_receipt_image(content)
             metadata, rows, issues = normalized_receipt(raw)
             with transaction.atomic():
-                receipt = PurchaseReceipt.objects.select_for_update().get(pk=pk)
+                receipt = PurchaseReceipt.objects.select_for_update().filter(pk=pk).first()
+                if receipt is None:
+                    return JsonResponse({"error": "Čekis ištrintas. Nuskaitymo rezultatas neįtrauktas."}, status=410)
                 if receipt.processing_attempt != attempt or receipt.status != PurchaseReceipt.Status.PROCESSING:
                     return JsonResponse(receipt_json(receipt))
                 for key, value in metadata.items():
@@ -109,6 +120,7 @@ class ReceiptProcessView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 issues += validate_receipt_lines(receipt, rows)
                 receipt.warnings = list(dict.fromkeys(issues))
                 receipt.status = PurchaseReceipt.Status.REVIEW
+                receipt.processing_started_at = None
                 receipt.save()
                 if not receipt.warnings:
                     include_receipt(receipt, rows)
@@ -119,9 +131,39 @@ class ReceiptProcessView(LoginRequiredMixin, PermissionRequiredMixin, View):
             logger.exception("Receipt processing failed for receipt %s", pk)
             error = "Nuskaitymas nutrūko. Nuotrauka išsaugota; bandykite dar kartą."
         PurchaseReceipt.objects.filter(pk=pk, processing_attempt=attempt, status=PurchaseReceipt.Status.PROCESSING).update(
-            status=PurchaseReceipt.Status.FAILED, error_message=error)
-        receipt.refresh_from_db()
+            status=PurchaseReceipt.Status.FAILED, processing_started_at=None, updated_at=timezone.now(), error_message=error)
+        receipt = PurchaseReceipt.objects.filter(pk=pk).first()
+        if receipt is None:
+            return JsonResponse({"error": "Čekis ištrintas. Nuskaitymo rezultatas neįtrauktas."}, status=410)
         return JsonResponse(receipt_json(receipt), status=422)
+
+
+class ReceiptStatusView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "valdyti.view_purchase"
+
+    def get(self, request, pk):
+        expire_processing_receipts(PurchaseReceipt.objects.filter(pk=pk))
+        response = JsonResponse(receipt_json(get_object_or_404(PurchaseReceipt, pk=pk)))
+        response["Cache-Control"] = "private, no-store"
+        return response
+
+
+class ReceiptCancelView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = "valdyti.add_purchase"
+
+    def post(self, request, pk):
+        with transaction.atomic():
+            receipt = get_object_or_404(PurchaseReceipt.objects.select_for_update(), pk=pk)
+            if receipt.status in {PurchaseReceipt.Status.PROCESSING, PurchaseReceipt.Status.UPLOADED}:
+                receipt.processing_attempt += 1
+                receipt.processing_started_at = None
+                receipt.status = PurchaseReceipt.Status.FAILED
+                receipt.error_message = "Nuskaitymas atšauktas. Originalas išsaugotas; vėliau gautas AI atsakymas nebus įtrauktas."
+                receipt.save()
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse(receipt_json(receipt))
+        messages.info(request, receipt.error_message or "Čekis šiuo metu nenuskaitomas; duomenys nepakeisti.")
+        return redirect("receipt-review", pk=pk)
 
 
 class ReceiptReviewView(LoginRequiredMixin, PermissionRequiredMixin, View):
@@ -138,10 +180,12 @@ class ReceiptReviewView(LoginRequiredMixin, PermissionRequiredMixin, View):
         })
 
     def get(self, request, pk):
+        expire_processing_receipts(PurchaseReceipt.objects.filter(pk=pk))
         return self.render(request, get_object_or_404(PurchaseReceipt, pk=pk))
 
     def post(self, request, pk):
         with transaction.atomic():
+            expire_processing_receipts(PurchaseReceipt.objects.filter(pk=pk))
             receipt = get_object_or_404(PurchaseReceipt.objects.select_for_update(), pk=pk)
             required = "valdyti.change_purchase" if receipt.status == PurchaseReceipt.Status.READY else "valdyti.add_purchase"
             if not request.user.has_perm(required):
@@ -193,9 +237,6 @@ class ReceiptDeleteView(LoginRequiredMixin, PermissionRequiredMixin, View):
     def post(self, request, pk):
         with transaction.atomic():
             receipt = get_object_or_404(PurchaseReceipt.objects.select_for_update(), pk=pk)
-            if receipt.status == PurchaseReceipt.Status.PROCESSING:
-                messages.error(request, "Čekis dabar nuskaitomas. Palaukite, kol baigsis nuskaitymas.")
-                return redirect("receipt-review", pk=pk)
             storage, name = receipt.source_file.storage, receipt.source_file.name
             receipt.delete()
             transaction.on_commit(lambda: storage.delete(name))

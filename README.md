@@ -101,6 +101,8 @@ Pirkimų puslapyje spauskite **Įkelti čekius**. Vienu kartu galima pažymėti 
 - Iš bendrinio užrašo „Prekės“ AI negali nustatyti, kas pirkta. Pvz., 6,65 € čekyje svogūnų laiškų pavadinimą reikės patikslinti ranka.
 - To paties failo kopija atpažįstama pagal SHA-256. Skirtingos to paties čekio nuotraukos papildomai tikrinamos pagal parduotuvę, datą ir nuskaitytą numerį. Tai sumažina dublikatų riziką, tačiau klaidingai perskaitytą numerį reikia pataisyti peržiūroje.
 - Čekio redagavimas atnaujina visas jo prekes vienoje operacijoje, jų nedubliuoja. Susietų prekių negalima keisti ar trinti atskirai apeinant čekio sumų patikrą.
+- Nuskaitymo būsena sąraše ir atidaryto čekio peržiūroje tikrinama kas 5 sekundes, nekartojant mokamos AI užklausos. Po 5 minučių užstrigęs bandymas atlaisvinamas ir pažymimas kaip nutrūkęs; jau užstrigę čekiai sutvarkomi atidarius sąrašą arba peržiūrą po atnaujinimo.
+- „Atšaukti nuskaitymą“ išsaugo originalą ir leidžia bandyti iš naujo. Čekį galima ištrinti ir vykstant nuskaitymui. Pavėluotas atšaukto ar ištrinto bandymo atsakymas atmetamas ir pirkimų nesukuria; jis taip pat negali perrašyti vėlesnio bandymo rezultato. Jau išsiųstos OpenAI užklausos atšaukimas vietoje negarantuoja, kad API darbas sustos ar nebus apmokestintas.
 - Originalai laikomi `private_media/purchase_receipts/`, ne viešame `media/`. Juos galima atsisiųsti tik prisijungus ir turint pirkimų peržiūros teisę. Aplinkos kintamasis `RECEIPT_STORAGE_ROOT` leidžia nurodyti kitą privatų, ilgalaikį katalogą.
 
 ### Diegimas į serverį
