@@ -67,6 +67,20 @@ unless explicitly zero. If amount/date/name is unreadable, or visible totals con
 in Lithuanian warnings. Do not fabricate a product, price, discount, or adjustment to make totals balance.
 Output only the schema. Decimal values as strings with a dot separator, no currency symbols."""
 
+MULTIPART_PROMPT = """MULTIPART RECEIPT MODE. The user has photographed ONE physical receipt in several parts.
+These are NOT separate purchases or separate receipts. Return exactly ONE receipt object and ONE consolidated
+item list. Each numbered PHOTO PART can have extra rotated/close-up views; all those views are of that part.
+Use the supplied part order as a hint; reconstruct the physical top-to-bottom order from visible continuation
+and overlapping lines. Match overlap using adjacent line sequences, weights, prices, and printed context.
+Include each physical printed line ONCE even when visible in two photos. IMPORTANT: genuinely repeated packages
+on different printed lines must all remain; do not deduplicate just because product names/prices are equal.
+The header/date/receipt number may be only in the first part, totals/discounts/rounding only in the last.
+Read ALL parts before assigning discounts and checking the final total. Never sum repeated subtotal/footer
+views. If parts show different receipt identities, missing sections, unreadable overlap, or uncertain line
+matching, set needs_review=true and explain in Lithuanian warnings. Never guess missing lines to balance.
+Apply all the accounting and schema rules below to the ONE reconstructed receipt:
+"""
+
 
 def inspect_receipt_image(data):
     try:
@@ -114,6 +128,16 @@ def image_inputs(data, detail="high"):
 
 
 def parse_receipt_image(data):
+    return _parse_receipt([data], multipart=False)
+
+
+def parse_receipt_parts(parts):
+    if not 2 <= len(parts) <= 6:
+        raise ReceiptParserError("Vienam čekiui pasirinkite nuo 2 iki 6 nuotraukų.")
+    return _parse_receipt(parts, multipart=True)
+
+
+def _parse_receipt(parts, *, multipart):
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise ReceiptParserError("Serverio .env faile nenustatytas OPENAI_API_KEY. Pridėkite raktą ir perkraukite Pamario servisus.")
@@ -121,12 +145,17 @@ def parse_receipt_image(data):
 
     model = os.getenv("OPENAI_RECEIPT_MODEL", "gpt-6.1-sol").strip() or "gpt-6.1-sol"
     detailed_model = model.startswith(("gpt-5.4", "gpt-5.5", "gpt-6"))
-    content = [{"type": "input_text", "text": "Nuskaitykite šį čekį."},
-               *image_inputs(data, "original" if detailed_model else "high")]
+    content = [{"type": "input_text", "text": (
+        f"Tai VIENAS čekis iš {len(parts)} nuotraukų dalių. Sujunkite į vieną čekį, persidengiančių eilučių neskaičiuokite du kartus."
+        if multipart else "Nuskaitykite šį čekį.")}]
+    for index, data in enumerate(parts, start=1):
+        if multipart:
+            content.append({"type": "input_text", "text": f"PHOTO PART {index} OF {len(parts)} — tos pačios čekio dalies vaizdai:"})
+        content.extend(image_inputs(data, "original" if detailed_model else "high"))
     try:
         with OpenAI(api_key=api_key, timeout=90.0, max_retries=0) as client:
             response = client.responses.create(
-                model=model, store=False, instructions=PROMPT,
+                model=model, store=False, instructions=(MULTIPART_PROMPT + PROMPT if multipart else PROMPT),
                 input=[{"role": "user", "content": content}],
                 text={"format": {"type": "json_schema", "name": "purchase_receipt", "strict": True,
                                  "schema": RECEIPT_SCHEMA}},

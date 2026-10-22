@@ -3,25 +3,39 @@
 {% block title %}Įkelti čekius — Pamario Klumpė{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{% static 'ValdytiAPP/css/purchases.css' %}">
-<div class="page-heading"><a class="back-link" href="{% url 'purchase-list' %}">← Prekių pirkimas</a><h1>Įkelti čekius</h1><p>Pažymėkite visas nuotraukas vienu kartu. Kiekviename faile turi būti vienas visas čekis.</p></div>
+<div class="page-heading"><a class="back-link" href="{% url 'purchase-list' %}">← Prekių pirkimas</a><h1>Įkelti čekius</h1><p>Pasirinkite tinkamą formą: atskiriems čekiams arba vienam ilgam čekiui iš kelių dalių.</p></div>
 {% if not api_configured %}<div class="message error">Serveryje dar nenustatytas OPENAI_API_KEY. Nuotraukas galite išsaugoti, o nuskaityti pridėję raktą į .env ir perkrovę Pamario servisus.</div>{% endif %}
 <form id="receipt-upload-form" method="post" enctype="multipart/form-data" class="form-card"
       data-url="{% url 'receipt-upload' %}" data-max-files="{{ max_files }}" data-max-bytes="{{ max_bytes }}">
     {% csrf_token %}
+    <h2>Keli atskiri čekiai</h2><p class="help-text">Viena nuotrauka = vienas visas čekis. Čia galite pasirinkti kelių skirtingų čekių nuotraukas iškart.</p>
     <div class="form-field"><label for="receipt-images">Čekių nuotraukos</label><input class="form-control" type="file" name="images" id="receipt-images" accept="image/jpeg,image/png,image/webp" multiple required>
     <small class="help-text">JPG, PNG arba WEBP. Iki {{ max_files }} nuotraukų vienu kartu, iki {{ max_mb }} MB kiekviena. Nuotraukos siunčiamos į OpenAI nuskaitymui; API užklausos apmokestinamos jūsų paskyroje.</small></div>
     <div class="form-actions"><span id="receipt-progress" role="status" aria-live="polite"></span><button class="button button-primary" type="submit" id="receipt-submit">Įkelti ir nuskaityti</button></div>
     <noscript>Šiam kelių failų įkėlimui reikia įjungti JavaScript.</noscript>
 </form>
+<form id="receipt-multipart-form" method="post" enctype="multipart/form-data" class="form-card receipt-multipart-form"
+      data-url="{% url 'receipt-multipart-create' %}" data-max-bytes="{{ max_bytes }}">
+    {% csrf_token %}
+    <h2>Vienas čekis iš kelių nuotraukų</h2>
+    <p>Nufotografuokite to paties čekio viršų, vidurį ir apačią iš arti. Tarp gretimų nuotraukų palikite 2–3 pasikartojančias eilutes. Apačioje turi matytis galutinė suma, o bent vienoje dalyje — data ir čekio numeris.</p>
+    <div class="form-field"><label for="receipt-part-images">Vieno čekio dalys</label><input type="file" class="form-control" name="parts" id="receipt-part-images" accept="image/jpeg,image/png,image/webp" multiple required>
+    <small class="help-text">2–6 nuotraukos, kiekviena iki {{ max_mb }} MB. Žemiau sudėliokite nuo čekio viršaus iki apačios. Skirtingų čekių čia nemaišykite.</small></div>
+    <ol id="receipt-part-order" class="receipt-part-order" aria-label="Čekio dalių eilės tvarka"></ol>
+    <p class="help-text">Visos dalys bus siunčiamos AI viena užklausa kaip vienas čekis. AI turės sujungti persidengiančias eilutes, o ne sudėti skirtingų nuotraukų sumas. Neaiškus rezultatas bus paliktas patikrai. API užklausos apmokestinamos jūsų OpenAI paskyroje.</p>
+    <div class="form-actions"><span id="receipt-multipart-progress" role="status" aria-live="polite"></span><button type="submit" id="receipt-multipart-submit" class="button button-primary">Sujungti dalis ir nuskaityti vieną čekį</button></div>
+    <noscript>Šiam įkėlimui reikia įjungti JavaScript.</noscript>
+</form>
 <div id="receipt-queue" class="receipt-queue" aria-live="polite"></div>
 <p class="help-text">Pirmiausia išsaugomi originalai, tada čekiai nuskaitomi po vieną. Palikite puslapį atidarytą, kol baigsis eiga. Sutapus sumoms pirkimai įtraukiami automatiškai. Neaiškius čekius galėsite pataisyti. Pakartotinai įkėlus tą patį failą naujas įrašas nekuriamas.</p>
 <div class="purchase-category-heading"><h2>Paskutiniai įkelti čekiai</h2><a class="button button-secondary" href="{% url 'receipt-upload' %}">Atnaujinti sąrašą</a></div>
 <div class="table-card"><table><thead><tr><th>Nuotrauka / čekis</th><th>Data</th><th>Būsena</th><th></th></tr></thead><tbody>
-{% for receipt in receipts %}<tr data-receipt-id="{{ receipt.pk }}" data-status="{{ receipt.status }}" data-status-url="{% url 'receipt-status' receipt.pk %}"><td>{{ receipt.original_filename }}{% if receipt.receipt_number %}<small>{{ receipt.receipt_number }}</small>{% endif %}<small class="receipt-row-message">{{ receipt.error_message }}</small></td><td class="receipt-row-date">{{ receipt.purchase_date|date:'Y-m-d'|default:'—' }}</td><td class="receipt-row-status">{{ receipt.get_status_display }}</td><td class="receipt-row-actions">
+{% for receipt in receipts %}<tr data-receipt-id="{{ receipt.pk }}" data-status="{{ receipt.status }}" data-status-url="{% url 'receipt-status' receipt.pk %}"><td>{{ receipt.original_filename }}{% if receipt.receipt_number %}<small>{{ receipt.receipt_number }}</small>{% endif %}{% if receipt.part_manifest %}<small>Vienas čekis iš {{ receipt.part_manifest|length }} nuotraukų{% if not receipt.upload_complete %} · Trūksta dalių — pasirinkite visas nuotraukas antroje formoje{% endif %}</small>{% endif %}<small class="receipt-row-message">{{ receipt.error_message }}</small></td><td class="receipt-row-date">{{ receipt.purchase_date|date:'Y-m-d'|default:'—' }}</td><td class="receipt-row-status">{{ receipt.get_status_display }}</td><td class="receipt-row-actions">
     <a href="{% url 'receipt-review' receipt.pk %}">Peržiūrėti</a>
-    {% if receipt.status == 'uploaded' or receipt.status == 'failed' %}<button type="button" class="button button-secondary receipt-retry" data-url="{% url 'receipt-process' receipt.pk %}" data-status-url="{% url 'receipt-status' receipt.pk %}" data-cancel-url="{% url 'receipt-cancel' receipt.pk %}" data-attempt="{{ receipt.processing_attempt }}">Bandyti nuskaityti</button>{% endif %}
+    {% if receipt.upload_complete %}{% if receipt.status == 'uploaded' or receipt.status == 'failed' %}<button type="button" class="button button-secondary receipt-retry" data-url="{% url 'receipt-process' receipt.pk %}" data-status-url="{% url 'receipt-status' receipt.pk %}" data-cancel-url="{% url 'receipt-cancel' receipt.pk %}" data-attempt="{{ receipt.processing_attempt }}">Bandyti nuskaityti</button>{% endif %}{% endif %}
     {% if receipt.status == 'processing' %}<button type="button" class="button button-secondary receipt-cancel" data-url="{% url 'receipt-cancel' receipt.pk %}">Atšaukti nuskaitymą</button>{% endif %}
 </td></tr>{% empty %}<tr><td colspan="4" class="empty-state">Čekių dar nėra.</td></tr>{% endfor %}
 </tbody></table></div>
 <script src="{% static 'ValdytiAPP/js/receipt_upload.js' %}" defer></script>
+<script src="{% static 'ValdytiAPP/js/receipt_multipart.js' %}" defer></script>
 {% endblock %}

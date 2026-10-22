@@ -84,7 +84,7 @@ Produkcijoje po diegimo: `https://valdyti.pamarioklumpe.lt/prekiu-pirkimas/`.
 - Vidutinė vieneto kaina skaičiuojama iš sumokėtos sumos ir kiekio. Visos sumos su PVM, po nuolaidų.
 - Ataskaitos: diena, savaitė (pirmadienis–sekmadienis), kalendorinis mėnuo.
 - Datos su duomenimis pateikiamos pasirinkime; numatyta naujausia įvesta diena.
-- Reikalingos migracijos iki `0009_purchasereceipt_purchase_receipt`. Paprastiems vartotojams reikia suteikti `Purchase` modelio teises; supervartotojas jas turi automatiškai.
+- Reikalingos migracijos iki `0010_purchasereceipt_part_manifest_purchasereceiptpart`. Paprastiems vartotojams reikia suteikti `Purchase` modelio teises; supervartotojas jas turi automatiškai.
 - Jei čekyje kiekis ar vieneto kaina nenurodyti, laukai gali likti tušti. Suvestinėje tada rodoma „—“, ne išgalvotas svoris.
 - Čekio apvalinimas ar mokėjimas lojalumo pinigais įrašomas kaip mokėjimo korekcija prie vienos čekio eilutės. Prekių savikaina lieka atskirta nuo faktiškai sumokėtos sumos.
 - Patikrintus čekių duomenis galima įkelti komanda `python manage.py import_purchase_receipts <failas.json> --dry-run`, o po patikros pakartoti be `--dry-run`. Importas patikrina kiekvieno čekio prekių ir mokėjimo sumas; pakartotinis identiško čekio importas nedubliuoja įrašų. Pirminius JSON ir nuotraukas laikykite ignoruojamame `media/purchase-imports/` kataloge.
@@ -94,6 +94,10 @@ Produkcijoje po diegimo: `https://valdyti.pamarioklumpe.lt/prekiu-pirkimas/`.
 ### Čekių nuotraukos ir AI
 
 Pirkimų puslapyje spauskite **Įkelti čekius**. Vienu kartu galima pažymėti iki 30 JPG/PNG/WEBP nuotraukų, po vieną visą čekį faile, iki 15 MB kiekviena. Pirmiausia išsaugomi visi originalai, tada naršyklė nuskaito čekius po vieną. Puslapį palikite atidarytą iki pabaigos. Nutrūkus ryšiui originalai lieka sąraše ir nuskaitymą galima pakartoti.
+
+Ilgiems čekiams tame pačiame puslapyje yra **atskira forma „Vienas čekis iš kelių nuotraukų“**. Pasirinkite 2–6 vieno fizinio čekio dalis (iki 15 MB kiekviena), nuotraukose palikdami 2–3 persidengiančias eilutes. Formoje matoma failų seka, kurią galima pakeisti mygtukais „Aukštyn“ ir „Žemyn“; pradėkite nuo viršaus, užbaikite galutine suma. Nuotraukos išsaugomos po vieną, todėl visam paketui nereikia didinti Nginx užklausos dydžio. Tik surinkus visas dalis jos perduodamos AI **viena užklausa** su atskiru multipart nurodymu: rekonstruoti vieną čekį, nesudėti persidengiančių eilučių du kartus ir nepanaikinti realiai pasikartojančių prekių pakuočių. Jei AI negali patikimai suderinti dalių ar jos priklauso skirtingiems čekiams, jis turi pažymėti rezultatą patikrai; programos sumų tikrinimas lieka toks pats.
+
+Visos dalys saugomos privačiai prie vieno čekio ir matomos jo peržiūroje. Pakartotinai pasirinkus tą patį nuotraukų rinkinį (net kita tvarka) tęsiamas tas pats įrašas, nesukuriamas antras. Nepilnas įkėlimas neleidžiamas nuskaityti ar patvirtinti. Jei įkėlimas nutrūko, antroje formoje dar kartą pasirinkite visas tas pačias nuotraukas; jei norite pradėti su kitu rinkiniu, nepilną įrašą galima ištrinti. Vienos dalies atskirai ištrinti negalima: trinamas visas čekis ir jo originalai.
 
 - Naudojamas Responses API, numatytas modelis `gpt-6.1-sol`, mąstymo lygis `medium`. Modelis nekeičiamas į pigesnį tyliai. Nuotraukos perduodamos į OpenAI; užklausos apmokamos API paskyroje. API raktas niekada nesiunčiamas naršyklei.
 - AI užpildo datą, parduotuvę, prekes, kategorijas, kiekius ir kainas. Sumos tikrinamos atskirai programoje: prekių eilutės turi sutapti su čekiu, o prekių suma + mokėjimo korekcija — su faktiškai sumokėta suma. Taip pat tikrinama kiekio ir kainos sandauga bei data čekio numeryje, jei ji yra.

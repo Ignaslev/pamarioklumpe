@@ -41,7 +41,7 @@
         link.href = data.review_url;
         link.textContent = data.status === 'review' ? 'Patikrinti ir pataisyti' : 'Peržiūrėti čekį';
         card.actions.append(link);
-        if (['uploaded', 'failed'].includes(data.status)) {
+        if (['uploaded', 'failed'].includes(data.status) && data.upload_complete !== false) {
             const button = document.createElement('button');
             button.type = 'button'; button.className = 'button button-secondary receipt-retry';
             button.dataset.url = data.process_url; button.textContent = 'Bandyti nuskaityti';
@@ -81,6 +81,22 @@
         watching.set(root, {card: cardFrom(root), url: root.dataset.statusUrl});
     }
     setInterval(() => { for (const entry of watching.values()) refreshStatus(entry); }, 5000);
+
+    const groupCards = new Map();
+    document.addEventListener('receipt-group-updated', event => {
+        const data = event.detail;
+        let card = groupCards.get(data.id);
+        if (!card) {
+            const root = document.createElement('div'); root.className = 'receipt-queue-item';
+            const title = document.createElement('strong'); title.textContent = data.filename;
+            const status = document.createElement('span');
+            const message = document.createElement('p');
+            const actions = document.createElement('div'); actions.className = 'button-group';
+            root.append(title, status, message, actions); queue.append(root);
+            card = {root, status, message, actions}; groupCards.set(data.id, card);
+        }
+        show(card, data);
+    });
 
     form.addEventListener('submit', async event => {
         event.preventDefault();

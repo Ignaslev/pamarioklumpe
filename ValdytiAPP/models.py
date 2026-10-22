@@ -305,6 +305,7 @@ class PurchaseReceipt(models.Model):
     source_file = models.FileField("Čekio originalas", upload_to=receipt_upload_path, storage=PrivateReceiptStorage())
     original_filename = models.CharField(max_length=255)
     file_hash = models.CharField(max_length=64, unique=True)
+    part_manifest = models.JSONField(default=list, blank=True)
     business_key = models.CharField(max_length=64, unique=True, null=True, blank=True)
     duplicate_of = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.UPLOADED, db_index=True)
@@ -334,3 +335,19 @@ class PurchaseReceipt(models.Model):
 
     def __str__(self):
         return self.receipt_number or self.original_filename
+
+    @property
+    def upload_complete(self):
+        return not self.part_manifest or self.parts.count() == len(self.part_manifest)
+
+
+class PurchaseReceiptPart(models.Model):
+    receipt = models.ForeignKey(PurchaseReceipt, on_delete=models.CASCADE, related_name="parts")
+    position = models.PositiveSmallIntegerField()
+    source_file = models.FileField(upload_to=receipt_upload_path, storage=PrivateReceiptStorage())
+    original_filename = models.CharField(max_length=255)
+    file_hash = models.CharField(max_length=64)
+
+    class Meta:
+        ordering = ("position",)
+        constraints = [models.UniqueConstraint(fields=("receipt", "position"), name="unique_receipt_part_position")]

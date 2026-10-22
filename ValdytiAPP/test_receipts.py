@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import shutil
 from datetime import date, timedelta
@@ -19,7 +20,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import Purchase, PurchaseReceipt
-from .receipt_parser import ReceiptParserError, amount, image_inputs, normalized_receipt, parse_receipt_image
+from .receipt_parser import ReceiptParserError, amount, image_inputs, normalized_receipt, parse_receipt_image, parse_receipt_parts
 
 
 def sample_receipt(**overrides):
@@ -127,6 +128,29 @@ class ReceiptParserTests(SimpleTestCase):
         self.assertEqual(len(image_inputs(photo().read())), 1)
         with self.assertRaises(ReceiptParserError):
             image_inputs(b"<script>not an image</script>")
+
+    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-not-real", "OPENAI_RECEIPT_MODEL": "gpt-6.1-sol"})
+    @patch("openai.OpenAI")
+    def test_multipart_uses_one_request_with_all_images_and_distinct_instructions(self, api):
+        api.return_value.__enter__.return_value.responses.create.return_value = SimpleNamespace(
+            status="completed", output_text=json.dumps(sample_receipt()))
+        parse_receipt_parts([photo("white").read(), photo("red").read(), photo("blue").read()])
+        create = api.return_value.__enter__.return_value.responses.create
+        create.assert_called_once()
+        kwargs = create.call_args.kwargs
+        self.assertIn("MULTIPART RECEIPT MODE", kwargs["instructions"])
+        self.assertIn("each physical printed line ONCE", kwargs["instructions"])
+        self.assertIn("genuinely repeated packages", kwargs["instructions"])
+        self.assertIn("different receipt identities", kwargs["instructions"])
+        content = kwargs["input"][0]["content"]
+        self.assertEqual(sum(item["type"] == "input_image" for item in content), 3)
+        self.assertEqual(len([item for item in content if item["type"] == "input_text" and "PHOTO PART" in item["text"]]), 3)
+        self.assertIn("VIENAS", content[0]["text"])
+
+    def test_multipart_parser_rejects_unsupported_part_counts(self):
+        for parts in ([], [b"one"], [b"part"] * 7):
+            with self.assertRaises(ReceiptParserError):
+                parse_receipt_parts(parts)
 
 
 class ReceiptWorkflowTests(TestCase):
@@ -473,3 +497,141 @@ class ReceiptWorkflowTests(TestCase):
         receipt = self.upload()
         self.assertEqual(self.client.get(reverse("receipt-review", args=[receipt.pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse("admin:valdyti_purchasereceipt_change", args=[receipt.pk])).status_code, 200)
+
+    def create_group(self, colors=("white", "red")):
+        files = [photo(color, f"part-{index}.jpg") for index, color in enumerate(colors, start=1)]
+        manifest = [{"hash": hashlib.sha256(file.read()).hexdigest(), "name": file.name, "size": file.size} for file in files]
+        for file in files:
+            file.seek(0)
+        response = self.client.post(reverse("receipt-multipart-create"), {"manifest": json.dumps(manifest)})
+        self.assertIn(response.status_code, (200, 201), response.content)
+        return PurchaseReceipt.objects.get(pk=response.json()["id"]), files, manifest
+
+    def upload_group_parts(self, receipt, files):
+        for position, file in enumerate(files, start=1):
+            file.seek(0)
+            response = self.client.post(reverse("receipt-part-upload", args=[receipt.pk, position]), {"image": file})
+            self.assertIn(response.status_code, (200, 201), response.content)
+        receipt.refresh_from_db()
+
+    def test_two_independent_forms_are_rendered(self):
+        response = self.client.get(reverse("receipt-upload"))
+        self.assertContains(response, 'id="receipt-upload-form"')
+        self.assertContains(response, 'id="receipt-multipart-form"')
+        self.assertContains(response, 'id="receipt-part-order"')
+        self.assertContains(response, "viena užklausa")
+
+    def test_group_saves_private_ordered_parts_under_one_receipt(self):
+        receipt, files, _ = self.create_group(("white", "red", "blue"))
+        self.assertFalse(receipt.upload_complete)
+        self.upload_group_parts(receipt, files)
+        self.assertTrue(receipt.upload_complete)
+        self.assertEqual(PurchaseReceipt.objects.count(), 1)
+        self.assertEqual(list(receipt.parts.values_list("position", flat=True)), [1, 2, 3])
+        for part, file in zip(receipt.parts.all(), files):
+            file.seek(0)
+            self.assertEqual(Path(part.source_file.path).read_bytes(), file.read())
+            self.assertTrue(Path(part.source_file.path).is_relative_to(self.temp))
+        self.assertEqual(receipt.source_file.name, receipt.parts.first().source_file.name)
+        self.assertFalse(Purchase.objects.exists())
+
+    def test_group_can_resume_with_same_files_in_different_order(self):
+        receipt, files, manifest = self.create_group()
+        first = self.client.post(reverse("receipt-part-upload", args=[receipt.pk, 1]), {"image": files[0]})
+        self.assertEqual(first.status_code, 201)
+        response = self.client.post(reverse("receipt-multipart-create"), {"manifest": json.dumps(manifest[::-1])})
+        self.assertEqual(response.json()["id"], receipt.pk)
+        self.assertTrue(response.json()["existing"])
+        self.assertEqual(response.json()["part_uploads"][0]["hash"], manifest[0]["hash"])
+        self.upload_group_parts(receipt, files)
+        self.assertEqual(receipt.parts.count(), 2)
+        self.assertEqual(PurchaseReceipt.objects.count(), 1)
+
+    def test_missing_parts_block_ai_and_manual_approval(self):
+        receipt, files, _ = self.create_group()
+        self.client.post(reverse("receipt-part-upload", args=[receipt.pk, 1]), {"image": files[0]})
+        with patch("ValdytiAPP.receipt_views.parse_receipt_parts") as parser:
+            response = self.client.post(reverse("receipt-process", args=[receipt.pk]))
+        self.assertEqual(response.status_code, 409)
+        parser.assert_not_called()
+        response = self.client.post(reverse("receipt-review", args=[receipt.pk]), self.review_data())
+        self.assertContains(response, "Trūksta čekio nuotraukų")
+        self.assertFalse(Purchase.objects.exists())
+        self.assertEqual(self.client.get(reverse("receipt-review", args=[receipt.pk])).status_code, 200)
+
+    def test_complete_group_calls_multi_parser_once_in_stored_order(self):
+        receipt, files, _ = self.create_group()
+        self.upload_group_parts(receipt, files)
+        expected = [Path(part.source_file.path).read_bytes() for part in receipt.parts.all()]
+        with patch("ValdytiAPP.receipt_views.parse_receipt_parts", return_value=(sample_receipt(), "gpt-6.1-sol")) as multi, \
+                patch("ValdytiAPP.receipt_views.parse_receipt_image") as single:
+            response = self.client.post(reverse("receipt-process", args=[receipt.pk]))
+            multi.assert_called_once_with(expected)
+            single.assert_not_called()
+            again = self.client.post(reverse("receipt-process", args=[receipt.pk]))
+            multi.assert_called_once()
+        self.assertEqual(response.json()["status"], "ready")
+        self.assertEqual(again.json()["status"], "ready")
+        self.assertEqual(Purchase.objects.count(), 1)
+        self.assertEqual(Purchase.objects.get().receipt_id, receipt.pk)
+
+    def test_group_uncertainty_stays_in_review_without_purchases(self):
+        receipt, files, _ = self.create_group()
+        self.upload_group_parts(receipt, files)
+        raw = sample_receipt(needs_review=True, warnings=["Dalių sutapimas neaiškus arba skirtingi čekiai."])
+        with patch("ValdytiAPP.receipt_views.parse_receipt_parts", return_value=(raw, "test")):
+            response = self.client.post(reverse("receipt-process", args=[receipt.pk]))
+        self.assertEqual(response.json()["status"], "review")
+        self.assertFalse(Purchase.objects.exists())
+
+    def test_wrong_photo_invalid_image_and_wrong_part_number_are_rejected(self):
+        receipt, files, _ = self.create_group()
+        url = reverse("receipt-part-upload", args=[receipt.pk, 1])
+        self.assertEqual(self.client.post(url, {"image": photo("blue")}).status_code, 400)
+        self.assertEqual(self.client.post(url, {"image": SimpleUploadedFile("fake.jpg", b"bad")}).status_code, 400)
+        self.assertEqual(self.client.post(reverse("receipt-part-upload", args=[receipt.pk, 3]), {"image": files[0]}).status_code, 400)
+        self.assertEqual(receipt.parts.count(), 0)
+
+    def test_invalid_group_manifests_create_no_records(self):
+        _, _, valid = self.create_group()
+        before = PurchaseReceipt.objects.count()
+        for invalid in ("bad-json", "{}", "[]", json.dumps([valid[0]]), json.dumps(valid * 4),
+                        json.dumps([valid[0], valid[0]]), json.dumps([{**valid[0], "hash": "wrong"}, valid[1]]),
+                        json.dumps([{**valid[0], "size": settings.RECEIPT_UPLOAD_MAX_BYTES + 1}, valid[1]])):
+            response = self.client.post(reverse("receipt-multipart-create"), {"manifest": invalid})
+            self.assertEqual(response.status_code, 400)
+        self.assertEqual(PurchaseReceipt.objects.count(), before)
+
+    def test_group_originals_are_visible_and_each_download_is_protected(self):
+        receipt, files, _ = self.create_group()
+        self.upload_group_parts(receipt, files)
+        response = self.client.get(reverse("receipt-review", args=[receipt.pk]))
+        self.assertContains(response, "Vieno čekio nuotraukos")
+        self.assertContains(response, "Dalis 2: part-2.jpg")
+        url = reverse("receipt-original", args=[receipt.pk])
+        response = self.client.get(url, {"part": "2", "inline": "1"})
+        files[1].seek(0)
+        self.assertEqual(b"".join(response.streaming_content), files[1].read())
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertEqual(self.client.get(url, {"part": "999"}).status_code, 404)
+        self.assertEqual(self.client.get(url, {"part": "bad"}).status_code, 404)
+        self.client.logout()
+        self.assertEqual(self.client.get(url, {"part": "2"}).status_code, 302)
+
+    def test_group_delete_removes_all_private_originals(self):
+        receipt, files, _ = self.create_group()
+        self.upload_group_parts(receipt, files)
+        paths = [Path(part.source_file.path) for part in receipt.parts.all()]
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(reverse("receipt-delete", args=[receipt.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(any(path.exists() for path in paths))
+        self.assertFalse(PurchaseReceipt.objects.exists())
+
+    def test_group_endpoints_require_purchase_add_permission(self):
+        receipt, files, manifest = self.create_group()
+        viewer = get_user_model().objects.create_user("multipart-no-access")
+        self.client.force_login(viewer)
+        self.assertEqual(self.client.post(reverse("receipt-multipart-create"), {"manifest": json.dumps(manifest)}).status_code, 403)
+        self.assertEqual(self.client.post(reverse("receipt-part-upload", args=[receipt.pk, 1]), {"image": files[0]}).status_code, 403)
+        self.assertFalse(receipt.parts.exists())

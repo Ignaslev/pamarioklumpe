@@ -7,7 +7,8 @@ from django.urls import path
 from . import views
 from .purchase_views import PurchaseCreateView, PurchaseDailyPdfView, PurchaseDeleteView, PurchaseListView, PurchaseUpdateView
 from .receipt_views import (ReceiptCancelView, ReceiptDeleteView, ReceiptOriginalView, ReceiptProcessView,
-                            ReceiptReviewView, ReceiptStatusView, ReceiptUploadView)
+                            ReceiptReviewView, ReceiptStatusView, ReceiptUploadView, ReceiptMultipartCreateView,
+                            ReceiptPartUploadView)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -16,6 +17,8 @@ urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("prekiu-pirkimas/", PurchaseListView.as_view(), name="purchase-list"),
     path("prekiu-pirkimas/cekiai/", ReceiptUploadView.as_view(), name="receipt-upload"),
+    path("prekiu-pirkimas/cekiai/is-daliu/", ReceiptMultipartCreateView.as_view(), name="receipt-multipart-create"),
+    path("prekiu-pirkimas/cekiai/<int:pk>/dalys/<int:position>/", ReceiptPartUploadView.as_view(), name="receipt-part-upload"),
     path("prekiu-pirkimas/cekiai/<int:pk>/nuskaityti/", ReceiptProcessView.as_view(), name="receipt-process"),
     path("prekiu-pirkimas/cekiai/<int:pk>/busena/", ReceiptStatusView.as_view(), name="receipt-status"),
     path("prekiu-pirkimas/cekiai/<int:pk>/atsaukti/", ReceiptCancelView.as_view(), name="receipt-cancel"),
